@@ -69,7 +69,7 @@ public:
         return bang_gpu_engine_impl_list_t::get_sum_implementation_list();
     }
 
-    void activate_stream_cnnl(CNcontext bang_stream);
+    void activate_stream_cnnl(CNqueue bang_stream);
 
     const impl_list_item_t *get_implementation_list(
             const op_desc_t *) const override;
