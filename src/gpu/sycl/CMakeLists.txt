@@ -14,7 +14,7 @@
 # limitations under the License.
 #===============================================================================
 
-if(DNNL_SYCL_CUDA OR DNNL_SYCL_HIP)
+if(DNNL_SYCL_CUDA OR DNNL_SYCL_HIP OR DNNL_SYCL_BANG)
     file(GLOB_RECURSE SOURCES
         ${CMAKE_CURRENT_SOURCE_DIR}/*.h
         ${CMAKE_CURRENT_SOURCE_DIR}/*.hpp

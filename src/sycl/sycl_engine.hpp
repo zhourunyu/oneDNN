@@ -65,6 +65,20 @@ status_t hip_engine_create(engine_t **engine, engine_kind_t engine_kind,
 } // namespace gpu
 #endif
 
+#ifdef DNNL_SYCL_BANG
+// XXX: forward declarations to avoid cuda dependencies on sycl level.
+namespace gpu {
+namespace cambricon {
+
+bool is_cambricon_mlu(const ::sycl::device &dev);
+
+status_t cuda_engine_create(engine_t **engine, engine_kind_t engine_kind,
+        const ::sycl::device &dev, const ::sycl::context &ctx, size_t index);
+
+} // namespace cambricon
+} // namespace gpu
+#endif
+
 namespace sycl {
 
 inline std::vector<::sycl::device> get_sycl_devices(
@@ -79,6 +93,10 @@ inline std::vector<::sycl::device> get_sycl_devices(
     const uint32_t vendor_id
             = ((dev_type == ::sycl::info::device_type::gpu) ? 0x1002
                                                             : intel_vendor_id);
+#ifdef DNNL_SYCL_CUDA
+    const uint32_t vendor_id
+            = ((dev_type == ::sycl::info::device_type::gpu) ? 0xcabc
+                                                            : intel_vendor_id);                                                            
 #else
     const uint32_t vendor_id = intel_vendor_id;
 #endif
@@ -89,7 +107,7 @@ inline std::vector<::sycl::device> get_sycl_devices(
     auto platforms = ::sycl::platform::get_platforms();
 
     for (const auto &p : platforms) {
-#if !defined(DNNL_SYCL_CUDA) && !defined(DNNL_SYCL_HIP)
+#if !defined(DNNL_SYCL_CUDA) && !defined(DNNL_SYCL_HIP) && !defined(DNNL_SYCL_BANG)
         if (!is_host(p) && !is_intel_platform(p)) continue;
 #endif
         auto p_devices = p.get_devices(dev_type);

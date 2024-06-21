@@ -37,6 +37,10 @@ if(NOT DNNL_DPCPP_HOST_COMPILER STREQUAL "DEFAULT" AND DNNL_SYCL_HIP)
     message(FATAL_ERROR "DNNL_DPCPP_HOST_COMPILER options is not supported for AMD.")
 endif()
 
+if(NOT DNNL_DPCPP_HOST_COMPILER STREQUAL "DEFAULT" AND DNNL_SYCL_BANG)
+    message(FATAL_ERROR "DNNL_DPCPP_HOST_COMPILER options is not supported for CAMBRICON.")
+endif()
+
 # Link SYCL library explicitly for open-source compiler on Windows.
 # In other cases, the compiler is able to automatically link it.
 if(WIN32 AND CMAKE_BASE_NAME STREQUAL "clang++")
@@ -102,6 +106,29 @@ elseif(DNNL_SYCL_HIP)
     find_package(HIP REQUIRED)
     find_package(rocBLAS REQUIRED)
     find_package(MIOpen REQUIRED)
+elseif(DNNL_SYCL_BANG)
+    # XXX: Suppress warning coming from SYCL headers:
+    #   error: use of function template name with no prior declaration in
+    #   function call with eplicit template arguments is a C++20 extension
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-c++20-extensions")
+
+    find_package(CNNL REQUIRED)
+    # An ugly workaround to satisfy OpenCL dependency that is coming from
+    # the compute layer. OpenCL is NOT used by BANG backend.
+
+    if(NOT WIN32)
+        set(bang_include_dirs)
+        foreach(bang_import_target cnnl::cnnl)
+            get_target_property(bang_import_target_include_dirs ${bang_import_target} INTERFACE_INCLUDE_DIRECTORIES)
+            set_target_properties(${bang_import_target} PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "")
+            list(APPEND bang_include_dirs ${bang_import_target_include_dirs})
+        endforeach()
+
+        list(REMOVE_DUPLICATES bang_include_dirs)
+        foreach(bang_include_dir ${bang_include_dirs})
+            append(CMAKE_CXX_FLAGS "-idirafter${bang_include_dir}")
+        endforeach()
+    endif()  
 else()
     # In order to support large shapes.
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-sycl-id-queries-fit-in-int")

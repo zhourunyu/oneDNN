@@ -446,7 +446,7 @@ inline int measure_perf_aggregate(timer::timer_t &t, dnnl_stream_t stream,
     t.reset();
 
     // Nvidia/AMD don't support profiling.
-    const bool use_profiling = is_gpu() && !is_nvidia_gpu() && !is_amd_gpu();
+    const bool use_profiling = is_gpu() && !is_nvidia_gpu() && !is_amd_gpu() && !is_cambricon_mlu();
     if (use_profiling) reset_gpu_profiling(stream);
 
     bool is_first_loop = true;
@@ -501,7 +501,7 @@ int measure_perf(const thr_ctx_t &ctx, res_t *res, perf_function_t &perf_func,
 
     const auto &engine = get_test_engine();
     dnnl_stream_flags_t profiling_flags {};
-    const bool use_profiling = is_gpu() && !is_nvidia_gpu() && !is_amd_gpu();
+    const bool use_profiling = is_gpu() && !is_nvidia_gpu() && !is_amd_gpu() && !is_cambricon_mlu();
 #ifdef DNNL_EXPERIMENTAL_PROFILING
     profiling_flags = dnnl_stream_profiling;
 #else
@@ -756,9 +756,22 @@ bool is_amd_gpu(const dnnl_engine_t &engine) {
     return false;
 }
 
+bool is_cambricon_mlu(const dnnl_engine_t &engine) {
+#ifdef DNNL_WITH_SYCL
+    if (!is_gpu(engine)) return false;
+    constexpr int nvidia_vendor_id = 0xcabc;
+    auto eng = dnnl::engine(engine, true);
+    auto device = dnnl::sycl_interop::get_device(eng);
+    const auto eng_vendor_id
+            = device.get_info<::sycl::info::device::vendor_id>();
+    return eng_vendor_id == nvidia_vendor_id;
+#endif
+    return false;
+}
+
 bool is_f64_supported(const dnnl_engine_t &engine) {
     if (!is_gpu(engine)) return false;
-    if (is_nvidia_gpu(engine) || is_amd_gpu(engine)) return false;
+    if (is_nvidia_gpu(engine) || is_amd_gpu(engine) || is_cambricon_mlu(engine)) return false;
 #if DNNL_GPU_RUNTIME == DNNL_RUNTIME_DPCPP
     if (is_sycl_engine(engine)) {
         auto eng = dnnl::engine(engine, true);

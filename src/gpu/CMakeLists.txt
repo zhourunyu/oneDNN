@@ -47,6 +47,10 @@ if(DNNL_SYCL_HIP)
     add_subdirectory(amd)
     set(${LIB_PACKAGE_NAME}_INTERFACE "${${LIB_PACKAGE_NAME}_INTERFACE}" PARENT_SCOPE)
 endif()
+if(DNNL_SYCL_BANG)
+    add_subdirectory(cambricon)
+    set(${LIB_PACKAGE_NAME}_INTERFACE "${${LIB_PACKAGE_NAME}_INTERFACE}" PARENT_SCOPE)
+endif()
 
 # check if warn_unused_result can be used in an alias
 set(COMPILER_ALLOWS_ALIAS_ATTRIBUTES_SOURCE

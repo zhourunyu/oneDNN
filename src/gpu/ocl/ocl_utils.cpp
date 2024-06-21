@@ -491,7 +491,7 @@ status_t get_ocl_device_eu_count(cl_device_id device, int32_t *eu_count) {
 
 status_t clone_kernel(cl_kernel kernel, cl_kernel *cloned_kernel) {
     cl_int err;
-#if !defined(DNNL_SYCL_HIP) && !defined(DNNL_SYCL_CUDA) \
+#if !defined(DNNL_SYCL_HIP) && !defined(DNNL_SYCL_CUDA) && !defined(DNNL_SYCL_BANG) \
         && defined(CL_VERSION_2_1)
     *cloned_kernel = clCloneKernel(kernel, &err);
     OCL_CHECK(err);

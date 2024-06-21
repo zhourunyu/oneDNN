@@ -157,8 +157,8 @@ inline bool unsupported_data_type(
                 memory::convert_to_c(dt));
 #endif
 
-#if defined(DNNL_SYCL_CUDA) || defined(DNNL_SYCL_HIP)
-    if (is_nvidia_gpu(eng) || is_amd_gpu(eng)) {
+#if defined(DNNL_SYCL_CUDA) || defined(DNNL_SYCL_HIP) || defined(DNNL_SYCL_BANG)
+    if (is_nvidia_gpu(eng) || is_amd_gpu(eng) || is_cambricon_mlu(eng)) {
         switch (dt) {
             case memory::data_type::f32: return false;
             case memory::data_type::f16: return false;

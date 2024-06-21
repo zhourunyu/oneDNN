@@ -73,6 +73,11 @@ status_t sycl_engine_factory_t::engine_create(engine_t **engine,
         return gpu::amd::hip_engine_create(
                 engine, engine_kind_, dev, ctx, index);
 #endif
+#ifdef DNNL_SYCL_BANG
+    if (gpu::cambricon::is_cambricon_mlu(dev))
+        return gpu::cambricon::bang_engine_create(
+                engine, engine_kind_, dev, ctx, index);
+#endif
     if (engine_kind_ == engine_kind::cpu && !dev.is_cpu() && !is_host(dev))
         return status::invalid_arguments;
     if (engine_kind_ == engine_kind::gpu && !dev.is_gpu())

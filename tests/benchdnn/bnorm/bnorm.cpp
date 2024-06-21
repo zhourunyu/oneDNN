@@ -423,7 +423,7 @@ void setup_cmp(compare::compare_t &cmp, const prb_t *prb, data_kind_t kind,
 #endif
 
     const bool use_relaxed_validation
-            = is_nvidia_gpu() || is_amd_gpu() || bnorm_single_pass;
+            = is_nvidia_gpu() || is_amd_gpu() || is_cambricon_mlu() || bnorm_single_pass;
     if (use_relaxed_validation) {
         // Nvidia (cuDNN) and AMD (MIOpen): store unbiased variance which
         // requires rescaling by `(N - 1) / N`, where `N = MB * Spatial`.

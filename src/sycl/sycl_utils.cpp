@@ -48,6 +48,21 @@ bool compare_hip_devices(const ::sycl::device &lhs, const ::sycl::device &rhs);
 } // namespace impl
 } // namespace dnnl
 #endif
+
+#ifdef DNNL_SYCL_BANG
+// Do not include sycl_bang_utils.hpp because it's intended for use in
+// gpu/nvidia directory only.
+
+namespace dnnl {
+namespace impl {
+namespace gpu {
+namespace cambricon {
+bool compare_bang_devices(const ::sycl::device &lhs, const ::sycl::device &rhs);
+}
+} // namespace gpu
+} // namespace impl
+} // namespace dnnl
+#endif
 namespace dnnl {
 namespace impl {
 namespace sycl {
@@ -95,6 +110,12 @@ bool are_equal(const ::sycl::device &lhs, const ::sycl::device &rhs) {
 #ifdef DNNL_SYCL_HIP
     if (lhs_be == backend_t::amd) {
         return gpu::amd::compare_hip_devices(lhs, rhs);
+    }
+#endif
+
+#ifdef DNNL_SYCL_BANG
+    if (lhs_be == backend_t::cambricon) {
+        return gpu::cambricon::compare_bang_devices(lhs, rhs);
     }
 #endif
     assert(!"not expected");
@@ -169,7 +190,7 @@ status_t check_device(engine_kind_t eng_kind, const ::sycl::device &dev,
     if (eng_kind == engine_kind::gpu && !dev.is_gpu())
         return status::invalid_arguments;
 
-#if !defined(DNNL_SYCL_CUDA) && !defined(DNNL_SYCL_HIP)
+#if !defined(DNNL_SYCL_CUDA) && !defined(DNNL_SYCL_HIP) && !defined(DNNL_SYCL_BANG)
     // Check that platform is an Intel platform.
     if (!is_host(dev) && !is_intel_platform(dev.get_platform()))
         return status::invalid_arguments;
