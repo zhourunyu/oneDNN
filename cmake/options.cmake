@@ -262,7 +262,7 @@ endif()
 set(DNNL_GPU_VENDOR "INTEL" CACHE STRING
     "specifies target GPU vendor for GPU engines.
     Can be INTEL (default) or NVIDIA.")
-if(NOT "${DNNL_GPU_VENDOR}" MATCHES "^(INTEL|NVIDIA|AMD)$")
+if(NOT "${DNNL_GPU_VENDOR}" MATCHES "^(INTEL|NVIDIA|AMD|CAMBRICON)$")
     message(FATAL_ERROR "Unsupported GPU vendor: ${DNNL_GPU_VENDOR}")
 endif()
 
