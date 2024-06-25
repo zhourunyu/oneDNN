@@ -149,13 +149,9 @@ cnnlHandle_t *sycl_bang_engine_t::get_cnnl_handle() {
     return cnnl_handle_.get().get();
 }
 
-cnnlHandle_t *sycl_bang_engine_t::get_cnnl_handle() {
-    if (!cnnl_handle_.is_set()) set_cnnl_handle();
-    return cnnl_handle_.get().get();
-}
 
 device_id_t sycl_bang_engine_t::device_id() const {
-    return device_id_t(static_cast<int>(impl::sycl::backend_t::nvidia),
+    return device_id_t(static_cast<int>(impl::sycl::backend_t::cambricon),
             static_cast<uint64_t>(compat::get_native<CNdev>(device())),
             static_cast<uint64_t>(0));
 }

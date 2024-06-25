@@ -178,55 +178,6 @@ static status_t convert_data_type(const memory_desc_t *mem_desc,
     return status::success;
 }
 
-class cnnl_error : virtual public std::runtime_error {
-
-protected:
-    const char *cnnl_error_map(cnnlStatus_t error) {
-        switch (error) {
-            case CNNL_STATUS_SUCCESS: return "CNNL_STATUS_SUCCESS";
-
-            case CNNL_STATUS_NOT_INITIALIZED:
-                return "CNNL_STATUS_NOT_INITIALIZED";
-
-            case CNNL_STATUS_ALLOC_FAILED:
-                return "CNNL_STATUS_ALLOC_FAILED";
-
-            case CNNL_STATUS_BAD_PARAM:
-                return "CNNL_STATUS_BAD_PARAM";
-
-            case CNNL_STATUS_ARCH_MISMATCH:
-                return "CNNL_STATUS_ARCH_MISMATCH";
-
-            case CNNL_STATUS_EXECUTION_FAILED:
-                return "CNNL_STATUS_EXECUTION_FAILED";
-
-            case CNNL_STATUS_INTERNAL_ERROR:
-                return "CNNL_STATUS_INTERNAL_ERROR";
-
-            case CNNL_STATUS_NOT_SUPPORTED:
-                return "CNNL_STATUS_NOT_SUPPORTED";
-
-            case CNNL_STATUS_NUMERICAL_OVERFLOW:
-                return "CNNL_STATUS_NUMERICAL_OVERFLOW";
-
-            default: return "<unknown>";
-        }
-    }
-
-    int error_number_;
-
-public:
-    explicit cnnl_error(const std::string &message, cnnlStatus_t result)
-        : std::runtime_error(
-                (message + std::string(cnnl_error_map(result)))) {
-        error_number_ = static_cast<int>(result);
-    }
-
-    virtual ~cnnl_error() throw() {}
-
-    virtual int get_error_number() const throw() { return error_number_; }
-};
-
 class bang_error : virtual public std::runtime_error {
 
 protected:
