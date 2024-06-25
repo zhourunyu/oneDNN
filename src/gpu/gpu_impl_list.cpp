@@ -53,6 +53,7 @@ const impl_list_item_t *gpu_impl_list_t::get_implementation_list(
     // clang-format on
 }
 
+
 } // namespace gpu
 } // namespace impl
 } // namespace dnnl

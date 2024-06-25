@@ -17,6 +17,8 @@
 #include "sycl/level_zero_utils.hpp"
 #include "oneapi/dnnl/dnnl_config.h"
 
+#if defined(DNNL_WITH_LEVEL_ZERO)
+
 #include <stdio.h>
 
 #if defined(__linux__)
@@ -41,7 +43,12 @@
 #include "common/verbose.hpp"
 
 #include "sycl/sycl_utils.hpp"
+
+#if DNNL_USE_SYCL121_API
+#include <CL/sycl/backend/level_zero.hpp>
+#else
 #include <sycl/ext/oneapi/backend/level_zero.hpp>
+#endif
 
 #include "sycl/sycl_engine_base.hpp"
 
@@ -167,12 +174,12 @@ device_uuid_t get_device_uuid(const ::sycl::device &dev) {
 status_t sycl_create_kernel_with_level_zero(
         std::unique_ptr<::sycl::kernel> &sycl_kernel,
         const std::string &kernel_name, const sycl_engine_base_t *sycl_engine,
-        const gpu::compute::binary_t &binary) {
+        const gpu::compute::binary_t &binary, gpu::compute::program_list_t *programs) {
     auto desc = ze_module_desc_t();
     desc.stype = ZE_STRUCTURE_TYPE_MODULE_DESC;
     desc.format = ZE_MODULE_FORMAT_NATIVE;
-    desc.inputSize = binary.size();
-    desc.pInputModule = binary.data();
+    desc.inputSize = binary->size();
+    desc.pInputModule = binary->data();
     desc.pBuildFlags = "";
     desc.pConstants = nullptr;
 
@@ -196,6 +203,9 @@ status_t sycl_create_kernel_with_level_zero(
     auto k = ::sycl::make_kernel<::sycl::backend::ext_oneapi_level_zero>(
             {kernel_bundle, ze_kernel}, sycl_engine->context());
     sycl_kernel = utils::make_unique<::sycl::kernel>(k);
+    // CHECK(func_zeModuleCreate(ze_ctx, ze_device, &desc, &ze_module, nullptr));
+    // CHECK(compat::make_kernel(sycl_kernel, kernel_name, sycl_engine, ze_module,
+    //         binary, programs));
 
     return status::success;
 }
@@ -210,3 +220,30 @@ bool compare_ze_devices(const ::sycl::device &lhs, const ::sycl::device &rhs) {
 } // namespace sycl
 } // namespace impl
 } // namespace dnnl
+
+
+#else
+
+namespace dnnl {
+namespace impl {
+namespace sycl {
+
+device_uuid_t get_device_uuid(const ::sycl::device &) {
+    return device_uuid_t(0, 0);
+}
+
+status_t sycl_create_kernel_with_level_zero(std::unique_ptr<::sycl::kernel> &sycl_kernel,
+        const std::string &kernel_name, const sycl_engine_base_t *sycl_engine,
+        const gpu::compute::binary_t &binary) {
+    return status::unimplemented;
+}
+
+bool compare_ze_devices(const ::sycl::device &, const ::sycl::device &) {
+    return false;
+}
+
+} // namespace sycl
+} // namespace impl
+} // namespace dnnl
+
+#endif // DNNL_WITH_LEVEL_ZERO

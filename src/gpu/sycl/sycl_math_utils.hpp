@@ -332,7 +332,7 @@ inline ::sycl::vec<T, width> min_vec(
 template <int width>
 inline ::sycl::vec<float, width> relu_fwd(
         ::sycl::vec<float, width> src_vec, float alpha) {
-    constexpr ::sycl::vec<float, width> zero_vec(0.0f);
+    ::sycl::vec<float, width> zero_vec(0.0f);
 
     if (alpha == 0.0f) {
         return max_vec(src_vec, zero_vec);

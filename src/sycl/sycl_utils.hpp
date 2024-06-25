@@ -73,7 +73,7 @@ inline ::sycl::nd_range<3> to_sycl_nd_range(
     return ::sycl::nd_range<3>(sycl_global_range, sycl_local_range);
 }
 
-enum class backend_t { unknown, host, level0, opencl, nvidia, amd };
+enum class backend_t { unknown, host, level0, opencl, nvidia, amd , cambricon };
 
 inline std::string to_string(backend_t backend) {
     switch (backend) {
@@ -82,6 +82,7 @@ inline std::string to_string(backend_t backend) {
         case backend_t::opencl: return "OpenCL";
         case backend_t::nvidia: return "Nvidia";
         case backend_t::amd: return "AMD";
+        case backend_t::cambricon: return "CAMBRICON";
         default: return "Unknown";
     }
 }

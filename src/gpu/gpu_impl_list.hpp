@@ -63,7 +63,7 @@ public:
             const memory_desc_t *src_md, const memory_desc_t *dst_md);
     static const impl_list_item_t *get_sum_implementation_list();
     static const impl_list_item_t *get_implementation_list(
-            const op_desc_t *desc);
+            const op_desc_t *desc);           
 };
 
 } // namespace gpu

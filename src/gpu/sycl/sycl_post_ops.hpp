@@ -58,7 +58,7 @@ struct ref_eltwise_fwd_t {
         using namespace alg_kind;
         using namespace math;
 
-        constexpr ::sycl::vec<float, width> nan_vec(NAN);
+        ::sycl::vec<float, width> nan_vec(NAN);
 
         switch (alg) {
             case eltwise_relu: return relu_fwd(src_vec, alpha); ;
@@ -169,7 +169,8 @@ struct sycl_post_ops_t {
     ::sycl::vec<float, width> apply(::sycl::vec<float, width> acc,
             ::sycl::vec<float, width> dst) const {
         using namespace primitive_kind;
-        constexpr ::sycl::vec<float, width> nan_vec(NAN);
+
+        ::sycl::vec<float, width> nan_vec(NAN);
 
         if (n_post_ops_ == 0) return acc;
 

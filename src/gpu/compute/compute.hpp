@@ -26,6 +26,7 @@
 #include "gpu/compute/kernel_ctx.hpp"
 #include "gpu/compute/kernel_generator.hpp"
 #include "gpu/compute/kernel_list.hpp"
+#include "gpu/compute/program_list.hpp"
 #include "gpu/compute/utils.hpp"
 
 #endif // GPU_COMPUTE_COMPUTE_HPP

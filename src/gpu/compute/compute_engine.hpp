@@ -186,6 +186,8 @@ public:
         return status;
     }
 
+    virtual std::function<void(void *)> get_program_list_deleter() const = 0;
+
 protected:
     virtual status_t init_device_info() = 0;
     virtual status_t init_device_info(const std::vector<uint8_t> &cache_blob) {

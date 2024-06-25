@@ -176,7 +176,7 @@ sycl::buffer<T, ndims> get_buffer(const memory &amemory) {
 
     auto &buf_u8 = *static_cast<sycl::buffer<uint8_t, 1> *>(handle_ptr);
 
-    auto range = sycl::range<1>(buf_u8.byte_size() / sizeof(T));
+    auto range = sycl::range<1>(buf_u8.get_size() / sizeof(T));
     return buf_u8.reinterpret<T, 1>(range);
 }
 

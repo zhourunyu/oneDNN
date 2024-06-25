@@ -48,7 +48,7 @@ public:
     status_t init() override {
         backend_ = get_sycl_backend(device_);
         if (!utils::one_of(backend_, backend_t::host, backend_t::opencl,
-                    backend_t::level0, backend_t::nvidia, backend_t::amd))
+                    backend_t::level0, backend_t::nvidia, backend_t::amd, backend_t::cambricon))
             return status::invalid_arguments;
 
         CHECK(check_device(kind(), device_, context_));
@@ -245,6 +245,8 @@ public:
     }
 
     device_id_t device_id() const override { return sycl_device_id(device_); }
+
+    std::function<void(void *)> get_program_list_deleter() const override;
 
     engine_id_t engine_id() const override {
         return engine_id_t(new sycl_engine_id_impl_t(

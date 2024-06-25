@@ -28,13 +28,20 @@
 #error "Unsupported compiler"
 #endif
 
+#if DNNL_USE_SYCL121_API
+#include <CL/sycl/backend/level_zero.hpp>
+#else
 #include <sycl/ext/oneapi/backend/level_zero.hpp>
+#endif
 
 #include "common/utils.hpp"
 #include "gpu/compute/device_info.hpp"
 #include "sycl/level_zero_utils.hpp"
 #include "sycl/sycl_compat.hpp"
 #include "sycl/sycl_engine_base.hpp"
+#include "gpu/sycl/sycl_gpu_engine.hpp"
+#include "gpu/compute/program_list.hpp"
+
 
 namespace dnnl {
 namespace impl {
@@ -48,6 +55,28 @@ namespace compat {
 using namespace gpu::compute;
 
 namespace {
+
+template <typename T>
+status_t cache_program(
+        const binary_t *binary, const T &program, program_list_t *programs) {
+    if (!programs) return status::success;
+
+#if DNNL_USE_SYCL121_API
+    static_assert(std::is_same<T, ::sycl::program>::value,
+            "This function expects sycl::program when SYCL 2017 API is used");
+    programs->add(binary, new T(program));
+#else
+    static_assert(
+            std::is_same<T,
+                    ::sycl::kernel_bundle<::sycl::bundle_state::executable>>::
+                    value,
+            "This function expects sycl::kernel_bundle when SYCL 2020 API is "
+            "used");
+    programs->add(binary, new T(program));
+#endif
+    return status::success;
+}
+
 template <typename sycl_object_t>
 void *get_native_impl(backend_t backend, const sycl_object_t &sycl_object) {
     if (backend == backend_t::opencl) {
@@ -78,6 +107,30 @@ void *get_native(const ::sycl::context &ctx) {
     return get_native_impl(backend, ctx);
 }
 
+// status_t make_kernel(std::unique_ptr<::sycl::kernel> &sycl_kernel,
+//         const sycl_engine_base_t *sycl_engine,
+//         const gpu::compute::binary_t &binary, const char *kernel_name) {
+//     auto backend = get_sycl_backend(sycl_engine->device());
+//     if (backend == backend_t::opencl) {
+//         gpu::ocl::ocl_wrapper_t<cl_program> ocl_program;
+//         CHECK(create_ocl_program(ocl_program, sycl_engine->ocl_device(),
+//                 sycl_engine->ocl_context(), binary));
+//         cl_int err;
+//         cl_kernel ocl_kernel = clCreateKernel(ocl_program, kernel_name, &err);
+//         OCL_CHECK(err);
+//         sycl_kernel = utils::make_unique<::sycl::kernel>(
+//                 ::sycl::make_kernel<::sycl::backend::opencl>(
+//                         ocl_kernel, sycl_engine->context()));
+//     } else if (backend == backend_t::level0) {
+//         CHECK(sycl_create_kernel_with_level_zero(
+//                 sycl_kernel, kernel_name, sycl_engine, binary));
+//     } else {
+//         assert(!"unexpected");
+//         return status::invalid_arguments;
+//     }
+//     return status::success;
+// }
+
 status_t make_kernel(std::unique_ptr<::sycl::kernel> &sycl_kernel,
         const sycl_engine_base_t *sycl_engine,
         const gpu::compute::binary_t &binary, const char *kernel_name) {
@@ -100,6 +153,17 @@ status_t make_kernel(std::unique_ptr<::sycl::kernel> &sycl_kernel,
         return status::invalid_arguments;
     }
     return status::success;
+}
+
+std::function<void(void *)> get_program_list_deleter() {
+#if DNNL_USE_SYCL121_API
+    return [](void *p) { delete reinterpret_cast<::sycl::program *>(p); };
+#else
+    return [](void *p) {
+        delete reinterpret_cast<
+                ::sycl::kernel_bundle<::sycl::bundle_state::executable> *>(p);
+    };
+#endif
 }
 
 uint64_t init_extensions(const ::sycl::device &dev) {

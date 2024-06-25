@@ -16,6 +16,44 @@ developers interested in improving application performance
 on Intel CPUs and GPUs. Deep learning practitioners should use one of the
 [applications enabled with oneDNN](#applications-enabled-with-onednn).
 
+--------------------------------------------------------------------------------
+## oneDNN-mlu 的构建编译过程
+
+### step 1 编译 dpcpp
+
+git clone -b sycl-mlu  git@github.com:wangzy0327/llvm.git
+
+按照readme文档编译，并更新环境变量
+```
+source env-cnrt.sh
+```
+
+### step 2 构建oneDNN
+
+git clone -b release-v3.2 git@github.com:wangzy0327/oneDNN.git
+
+#### step 2.1 编译构建oneTBB
+oneDNN的CPU_Runtime依赖于oneTBB, 下载oneTBB，编译源码
+
+#### step 2.2 构建oneDNN源码
+
+设置neuware,dpcpp,oneTBB的环境变量,这里给出oneTBB环境变量设置,前面两项通过 dpcpp中的env-cnrt.sh更新
+
+```
+export TBBROOT=/home/wzy/build-oneTBB
+```
+
+构建命令如下：
+```
+cmake .. -DCMAKE_C_COMPILER=/home/wzy/repos/zkjh-llvm-mlu/build/bin/clang -DCMAKE_CXX_COMPILER=/home/wzy/repos/zkjh-llvm-mlu/build/bin/clang++ -DDNNL_CPU_RUNTIME=TBB -DDNNL_GPU_RUNTIME=DPCPP -DDNNL_GPU_VENDOR=CAMBRICON -DCMAKE_BUILD_TYPE=Release -DONEDNN_BUILD_GRAPH=OFF -DDNNL_BUILD_EXAMPLES=OFF -DDNNL_BUILD_TESTS=OFF -DCMAKE_INSTALL_PREFIX=/home/wzy/sycl_workspace/oneDNN-mlu/
+```
+
+构建成功后，编译，安装在oneDNN-mlu目录下
+```
+make -j
+make install
+```
+
 # Table of Contents
 
 - [Documentation](#documentation)

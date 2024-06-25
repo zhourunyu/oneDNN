@@ -23,9 +23,8 @@ find_path(CNNL_INCLUDE_DIR  "cnnl.h"
 find_library(CNNL_LIBRARY  cnnl
         HINTS /usr/local/neuware/lib64)
 
-
 include(FindPackageHandleStandardArgs)
-find_package_handle_standard_args(cnnl
+find_package_handle_standard_args(CNNL
     REQUIRED_VARS
         CNNL_INCLUDE_DIR
         CNNL_LIBRARY
@@ -33,6 +32,9 @@ find_package_handle_standard_args(cnnl
 
 if(CNNL_INCLUDE_DIR AND CNNL_LIBRARY)
     set(CNNL_FOUND TRUE)
+    message(STATUS "CNNL_INCLUDE_DIR: ${CNNL_INCLUDE_DIR}")
+    message(STATUS "CNNL_LIBRARY: ${CNNL_LIBRARY}")
+    message(STATUS "find cnnl include & cnnl library")
 else()
     message(FATAL_ERROR "cnnl not found!")
 endif()
@@ -43,6 +45,8 @@ if(NOT TARGET cnnl::cnnl)
   set_target_properties(cnnl::cnnl PROPERTIES
       IMPORTED_LOCATION 
       ${CNNL_LIBRARY}
+      INTERFACE_INCLUDE_DIRECTORIES
+      "${CNNL_INCLUDE_DIR}"
       INTERFACE_LINK_LIBRARIES
       "Threads::Threads;${CNNL_LIBRARY}"
       INTERFACE_COMPILE_DEFINITIONS

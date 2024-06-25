@@ -72,7 +72,7 @@ namespace cambricon {
 
 bool is_cambricon_mlu(const ::sycl::device &dev);
 
-status_t cuda_engine_create(engine_t **engine, engine_kind_t engine_kind,
+status_t bang_engine_create(engine_t **engine, engine_kind_t engine_kind,
         const ::sycl::device &dev, const ::sycl::context &ctx, size_t index);
 
 } // namespace cambricon
@@ -93,7 +93,7 @@ inline std::vector<::sycl::device> get_sycl_devices(
     const uint32_t vendor_id
             = ((dev_type == ::sycl::info::device_type::gpu) ? 0x1002
                                                             : intel_vendor_id);
-#ifdef DNNL_SYCL_CUDA
+#elif defined(DNNL_SYCL_BANG)
     const uint32_t vendor_id
             = ((dev_type == ::sycl::info::device_type::gpu) ? 0xcabc
                                                             : intel_vendor_id);                                                            
