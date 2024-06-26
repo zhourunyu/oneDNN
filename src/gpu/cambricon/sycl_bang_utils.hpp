@@ -311,7 +311,7 @@ static status_t bang_to_dnnl_status(CNresult bang_result) {
 #define BANG_EXECUTE_FUNC(name, ...) \
     { \
         auto err = name(__VA_ARGS__); \
-        if (err != BANG_SUCCESS) { \
+        if (err != CN_SUCCESS) { \
             throw bang_error(std::string("At :") \
                             + std::string(BANG_ERROR_LOCATION) \
                             + std::string(#name) + std::string(" : "), \
@@ -334,7 +334,7 @@ static status_t bang_to_dnnl_status(CNresult bang_result) {
 #define BANG_EXECUTE_FUNC_V(name, ...) \
     { \
         auto err = name(__VA_ARGS__); \
-        if (err != BANG_SUCCESS) { \
+        if (err != CN_SUCCESS) { \
             std::cout << bang_error(std::string("At :") \
                             + std::string(BANG_ERROR_LOCATION) \
                             + std::string(#name) + std::string(" : "), \
