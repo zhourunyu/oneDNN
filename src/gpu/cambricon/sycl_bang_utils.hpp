@@ -165,7 +165,9 @@ static status_t convert_data_type(const memory_desc_t *mem_desc,
         case dnnl_data_type_t::dnnl_f16:
             *cnnl_data_type = cnnlDataType_t::CNNL_DTYPE_HALF;
             break;
-        // case dnnl_data_type_t::dnnl_bf16:
+        case dnnl_data_type_t::dnnl_bf16:
+            *cnnl_data_type = cnnlDataType_t::CNNL_DTYPE_BFLOAT16;
+            break;
         case dnnl_data_type_t::dnnl_f32:
             *cnnl_data_type = cnnlDataType_t::CNNL_DTYPE_FLOAT;
             break;
