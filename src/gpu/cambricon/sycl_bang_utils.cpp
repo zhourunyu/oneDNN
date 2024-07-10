@@ -62,7 +62,7 @@ bool has_bf16_support(const ::sycl::device &dev) {
     auto bang_dev = compat::get_native<CNdev>(dev);
     int support_half = 0;
     CNdevice_attribute attrib = CN_DEVICE_ATTRIBUTE_BF16_COMPUTING_SUPPORTED;
-    cnDeviceGetAttribute(&support_half,attrib,bang_dev);
+    cnDeviceGetAttribute(&support_half, attrib, bang_dev);
     return support_half;
 }
 

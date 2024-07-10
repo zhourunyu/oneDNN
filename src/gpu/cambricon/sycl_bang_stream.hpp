@@ -18,7 +18,7 @@
 #ifndef GPU_CAMBRICON_SYCL_BANG_STREAM_HPP
 #define GPU_CAMBRICON_SYCL_BANG_STREAM_HPP
 
-#include <cnrt.h>
+#include <cn_api.h>
 #include <cnnl.h>
 
 #include "common/engine.hpp"

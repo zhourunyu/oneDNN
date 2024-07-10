@@ -19,7 +19,6 @@
 #define GPU_CAMBRICON_SYCL_BANG_ENGINE_HPP
 
 #include <cnnl.h>
-#include <cn_api.h>
 
 #include "common/stream.hpp"
 #include "common/thread_local_storage.hpp"
@@ -103,7 +102,7 @@ private:
     bool primary_context_;
 };
 
-} // namespace nvidia
+} // namespace cambricon
 } // namespace gpu
 } // namespace impl
 } // namespace dnnl

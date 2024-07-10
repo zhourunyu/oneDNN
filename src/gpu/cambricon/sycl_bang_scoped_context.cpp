@@ -35,8 +35,8 @@ bang_sycl_scoped_context_handler_t::bang_sycl_scoped_context_handler_t(
             // No context is installed and the suggested context is primary
             // This is the most common case. We can activate the context in the
             // thread and leave it there until all the PI context referring to
-            // the same underlying BANG primary context are destroyed. This
-            // emulates the behaviour of the BANG runtime api, and avoids costly
+            // the same underlying CNRT primary context are destroyed. This
+            // emulates the behaviour of the CNRT api, and avoids costly
             // context switches. No action is required on this side of the if.
             need_to_recover_
                     = !(original_ == nullptr && engine.has_primary_context());

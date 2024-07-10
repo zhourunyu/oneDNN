@@ -33,25 +33,7 @@ status_t cnnl_softmax_fwd_t::execute(const exec_ctx_t &ctx) const {
     cambricon::sycl_bang_stream_t *bang_stream
             = utils::downcast<cambricon::sycl_bang_stream_t *>(ctx.stream());
 
-    if (!pd()->attr()->scales_.get(DNNL_ARG_SRC).defined())
-        CHECK(stream_utils::copy_input_arg_to_host(ctx, bang_stream,
-                &host_scales_[0], DNNL_ARG_ATTR_SCALES | DNNL_ARG_SRC,
-                sizeof(float)));
-
-    if (!pd()->attr()->scales_.get(DNNL_ARG_DST).defined())
-        CHECK(stream_utils::copy_input_arg_to_host(ctx, bang_stream,
-                &host_scales_[1], DNNL_ARG_ATTR_SCALES | DNNL_ARG_DST,
-                sizeof(float)));
-
     auto status = bang_stream->interop_task([&](::sycl::handler &cgh) {
-        compat::host_task(cgh, [=](const compat::interop_handle &) {
-            host_scales_[2] = host_scales_[0] / host_scales_[1];
-        });
-    });
-
-    if (status != status::success) return status::runtime_error;
-
-    status = bang_stream->interop_task([&](::sycl::handler &cgh) {
         auto arg_src = CTX_IN_SYCL_MEMORY(DNNL_ARG_SRC);
         auto arg_dst = CTX_OUT_SYCL_MEMORY(DNNL_ARG_DST);
 
@@ -64,7 +46,6 @@ status_t cnnl_softmax_fwd_t::execute(const exec_ctx_t &ctx) const {
 
             args.push_back(arg_src.get_native_pointer(ih));
             args.push_back(arg_dst.get_native_pointer(ih));
-            args.push_back(&host_scales_[2]);
 
             pd()->softmax_impl_->execute(handle, args.data(), args.size());
         });

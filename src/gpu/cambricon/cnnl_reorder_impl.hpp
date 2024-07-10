@@ -26,23 +26,6 @@ namespace impl {
 namespace gpu {
 namespace cambricon {
 
-namespace {
-// `dims` should fit into uint16_t, when all `strides` are ones,
-// otherwise `cnnlTransformTensor` returns `CNNL_STATUS_NOT_SUPPORTED`
-// at execution.
-status_t check_dims_and_strides(const int dims[DNNL_MAX_NDIMS],
-        const int strides[DNNL_MAX_NDIMS], int ndims) {
-    for (int d = 0; d < ndims; d++) {
-        if (strides[d] != 1) return status::success;
-    }
-    for (int d = 0; d < ndims; d++) {
-        if (dims[d] > nstl::numeric_limits<uint16_t>::max())
-            return status::unimplemented;
-    }
-    return status::success;
-}
-} // namespace
-
 struct cnnl_reorder_generic_t {
 public:
     virtual status_t init(const reorder_pd_t *pd) = 0;
@@ -63,13 +46,10 @@ protected:
     cnnlDataType_t dst_data_type_;
     int ndims_;
     int dims_[DNNL_MAX_NDIMS];
+    int dst_dims_[DNNL_MAX_NDIMS];
     cnnlTensorDescriptor_t src_desc_;
     cnnlTensorDescriptor_t dst_desc_;
     cnnlTransposeDescriptor_t trans_desc_;
-    cnnlTensorLayout_t src_format_;
-    cnnlTensorLayout_t dst_format_;
-    std::vector<int> permute;
-    float beta_ = 0.0f;
     int dst_offset_in_bytes_ = 0;
     int src_offset_in_bytes_ = 0;
 };
@@ -89,32 +69,32 @@ public:
                 * types::data_type_size(pd->dst_md()->data_type);
         src_offset_in_bytes_ = pd->src_md()->offset0
                 * types::data_type_size(pd->src_md()->data_type);
-        //cnnl reorder only support alpha = 1 and beta = 0        
-        beta_ = pd->beta();
-
-        assert(beta_ == 0);
 
         CHECK(convert_data_type(pd->src_md(), &src_data_type_));
         CHECK(convert_data_type(pd->dst_md(), &dst_data_type_));
 
         convert_dims(pd->src_md()->padded_dims, dims_, pd->src_md()->ndims);
+        convert_dims(pd->dst_md()->padded_dims, dst_dims_, pd->dst_md()->ndims);
 
         ndims_ = pd->dst_md()->ndims > 4 ? pd->dst_md()->ndims : 4;
 
         bool ok = layout_n_permute(pd);
         if(!ok) return status::invalid_arguments;
 
+        CHECK(transpose_dims(dims_, ndims_, src_format_));
+        CHECK(transpose_dims(dst_dims_, ndims_, dst_format_));
+
         // Create and set tensor transform descriptor
         CHECK(CNNL_EXECUTE_FUNC_S(
                 cnnlCreateTransposeDescriptor, &trans_desc_));
         CHECK(CNNL_EXECUTE_FUNC_S(cnnlSetTransposeDescriptor, trans_desc_,
-                ndims_, permute.data()));
-        // Create and set source tensor descriptor             
+                ndims_, permute_.data()));
+        // Create and set source tensor descriptor
         CHECK(CNNL_EXECUTE_FUNC_S(cnnlCreateTensorDescriptor, &src_desc_));
         CHECK(CNNL_EXECUTE_FUNC_S(cnnlSetTensorDescriptor, src_desc_, src_format_, src_data_type_, ndims_, dims_));
         // Create and set destination tensor descriptor
         CHECK(CNNL_EXECUTE_FUNC_S(cnnlCreateTensorDescriptor, &dst_desc_));
-        CHECK(CNNL_EXECUTE_FUNC_S(cnnlSetTensorDescriptor, dst_desc_, dst_format_, dst_data_type_, ndims_, dims_));
+        CHECK(CNNL_EXECUTE_FUNC_S(cnnlSetTensorDescriptor, dst_desc_, dst_format_, dst_data_type_, ndims_, dst_dims_));
 
         return status::success;
     }
@@ -124,39 +104,21 @@ public:
         get_format(pd->src_md(), src_format_);
         get_format(pd->dst_md(), dst_format_);
 
-        if(src_format_ == format_tag::nchw){
-            if(dst_format_ == format_tag::nchw) 
-                permute = {0, 1, 2, 3};
-            else if(dst_format_ == format_tag::nhwc)
-                permute = {0, 2, 3, 1};
+        if (src_format_ == cnnlTensorLayout_t::CNNL_LAYOUT_NCHW) {
+            if (dst_format_ == cnnlTensorLayout_t::CNNL_LAYOUT_NCHW) 
+                permute_ = {0, 1, 2, 3};
+            else if (dst_format_ == cnnlTensorLayout_t::CNNL_LAYOUT_NHWC)
+                permute_ = {0, 2, 3, 1};
             else
                 return false;
-        }
-        else if(src_format_ == format_tag::nhwc){
-            if(dst_format_ == format_tag::nhwc) 
-                permute = {0, 1, 2, 3};
-            else if(dst_format_ == format_tag::nchw)
-                permute = {0, 3, 1, 2};
+        } else if (src_format_ == cnnlTensorLayout_t::CNNL_LAYOUT_NHWC) {
+            if (dst_format_ == cnnlTensorLayout_t::CNNL_LAYOUT_NHWC) 
+                permute_ = {0, 1, 2, 3};
+            else if (dst_format_ == cnnlTensorLayout_t::CNNL_LAYOUT_NCHW)
+                permute_ = {0, 3, 1, 2};
             else
                 return false;
-        }
-        else if(src_format_ == format_tag::goihw){
-            if(dst_format_ == format_tag::goihw) 
-                permute = {0, 1, 2, 3, 4};
-            else if(dst_format_ == format_tag::gohwi)
-                permute = {0, 1, 3, 4, 2};
-            else
-                return false;
-        }
-        else if(src_format_ == format_tag::gohwi){
-            if(dst_format_ == format_tag::gohwi) 
-                permute = {0, 1, 2, 3, 4};
-            else if(dst_format_ == format_tag::goihw)
-                permute = {0, 1, 4, 2, 3};
-            else
-                return false;
-        }
-        else
+        } else
             return false;
         return true;
     }
@@ -164,12 +126,15 @@ public:
     void execute(cnnlHandle_t handle, void *src, void *dst) const override {
         // cnnlTranspose() function is required to support blocking.
         // It requires the output tensor to be in cnnl supported format.
+
         CNNL_EXECUTE_FUNC(cnnlTranspose, handle, trans_desc_, 
                 src_desc_, src, dst_desc_, dst);
     }
 
 private:
-
+    cnnlTensorLayout_t src_format_;
+    cnnlTensorLayout_t dst_format_;
+    std::vector<int> permute_;
 
     using cnnl_reorder_generic_t::cnnl_reorder_generic_t;
 };

@@ -20,14 +20,12 @@
 
 #include "sycl/sycl_utils.hpp"
 
-
-// TODO
 // #include "gpu/cambricon/cnnl_batch_normalization.hpp"
 // #include "gpu/cambricon/cnnl_binary.hpp"
 // #include "gpu/cambricon/cnnl_conv_inner_product.hpp"
 // #include "gpu/cambricon/cnnl_convolution.hpp"
 // #include "gpu/cambricon/cnnl_deconvolution.hpp"
-// #include "gpu/cambricon/cnnl_eltwise.hpp"
+#include "gpu/cambricon/cnnl_eltwise.hpp"
 // #include "gpu/cambricon/cnnl_gemm_inner_product.hpp"
 // #include "gpu/cambricon/cnnl_lrn.hpp"
 // #include "gpu/cambricon/cnnl_matmul.hpp"
@@ -40,16 +38,16 @@
 #include "gpu/cambricon/sycl_bang_scoped_context.hpp"
 #include "gpu/cambricon/sycl_bang_stream.hpp"
 
-#include "gpu/sycl/ref_batch_normalization.hpp"
-#include "gpu/sycl/ref_binary.hpp"
-#include "gpu/sycl/ref_eltwise.hpp"
-#include "gpu/sycl/ref_layer_normalizations.hpp"
-#include "gpu/sycl/ref_lrn.hpp"
-#include "gpu/sycl/ref_pooling.hpp"
-#include "gpu/sycl/ref_prelu.hpp"
-#include "gpu/sycl/ref_resampling.hpp"
-#include "gpu/sycl/ref_shuffle.hpp"
-#include "gpu/sycl/ref_softmax.hpp"
+// #include "gpu/sycl/ref_batch_normalization.hpp"
+// #include "gpu/sycl/ref_binary.hpp"
+// #include "gpu/sycl/ref_eltwise.hpp"
+// #include "gpu/sycl/ref_layer_normalizations.hpp"
+// #include "gpu/sycl/ref_lrn.hpp"
+// #include "gpu/sycl/ref_pooling.hpp"
+// #include "gpu/sycl/ref_prelu.hpp"
+// #include "gpu/sycl/ref_resampling.hpp"
+// #include "gpu/sycl/ref_shuffle.hpp"
+// #include "gpu/sycl/ref_softmax.hpp"
 
 namespace dnnl {
 namespace impl {
@@ -95,17 +93,14 @@ status_t sycl_bang_engine_t::set_cnnl_handle() {
     bang_sycl_scoped_context_handler_t sc(*this);
     cnnlHandle_t handle;
     CHECK(CNNL_EXECUTE_FUNC_S(cnnlCreate, &handle));
-    cnnl_handle_.set(
-            std::unique_ptr<cnnlHandle_t, void (*)(cnnlHandle_t *)>(
-                    new cnnlHandle_t(handle), [](cnnlHandle_t *h) {
-                        if (h != nullptr)
-                            CNNL_EXECUTE_FUNC_V(cnnlDestroy, *h);
-                        delete h;
-                    }));
+    cnnl_handle_.set(std::unique_ptr<cnnlHandle_t, void (*)(cnnlHandle_t *)>(
+            new cnnlHandle_t(handle), [](cnnlHandle_t *h) {
+                if (h != nullptr) CNNL_EXECUTE_FUNC_V(cnnlDestroy, *h);
+                delete h;
+            }));
     handle = nullptr;
     return status::success;
 }
-
 
 CNcontext sycl_bang_engine_t::get_underlying_context() const {
     return compat::get_native<CNcontext>(context());
@@ -128,19 +123,27 @@ status_t sycl_bang_engine_t::underlying_context_type() {
     // this is a costly function which take avarage up to 75ms
     // on titanrx. So we must run it once and store the variable
     // in primary_context_;
-    CNcontext primary;
-    CNdev device_current;
+    CNcontext primary, current;
     CNcontext desired = compat::get_native<CNcontext>(context());
     CNdev bang_device = compat::get_native<CNdev>(device());
-        CNresult ret = cnCtxGetCurrent(&primary);
-    if(ret != CN_SUCCESS){
-        printf("%s@%d return %d FAILED\n",__func__, __LINE__,ret);
+    CHECK(BANG_EXECUTE_FUNC_S(cnCtxGetCurrent, &current));
+    
+    unsigned int flags;
+    int is_primary_active;
+    CHECK(BANG_EXECUTE_FUNC_S(cnSharedContextGetState, bang_device, &flags,
+            &is_primary_active));
+
+    // If primary context is active, current context will be the primary context
+    // So we can do the comparison without the expensive calls to CtxRetain and CtxRelease
+    if (current == desired || is_primary_active) {
+        primary_context_
+                = (current == desired) ? (is_primary_active == 1) : false;
+    } else {
+        CHECK(BANG_EXECUTE_FUNC_S(
+                cnSharedContextAcquire, &primary, bang_device));
+        CHECK(BANG_EXECUTE_FUNC_S(cnSharedContextRelease, bang_device));
+        primary_context_ = (primary == desired);
     }
-    CNresult ret2 = cnCtxGetDevice(&device_current);
-    if(ret2 != CN_SUCCESS){
-        printf("%s@%d return %d FAILED\n",__func__, __LINE__,ret2);
-    }
-    primary_context_ = primary == desired && device_current == bang_device;
     return status::success;
 }
 
@@ -148,7 +151,6 @@ cnnlHandle_t *sycl_bang_engine_t::get_cnnl_handle() {
     if (!cnnl_handle_.is_set()) set_cnnl_handle();
     return cnnl_handle_.get().get();
 }
-
 
 device_id_t sycl_bang_engine_t::device_id() const {
     return device_id_t(static_cast<int>(impl::sycl::backend_t::cambricon),
@@ -166,17 +168,21 @@ void sycl_bang_engine_t::activate_stream_cnnl(CNqueue bang_stream) {
     }
 }
 
-
 namespace {
 using namespace dnnl::impl::data_type;
 
 // clang-format off
 constexpr dnnl::impl::impl_list_item_t sycl_bang_impl_list[] = {
         // Elementwise
-        INSTANCE(sycl::ref_sycl_eltwise_fwd_t)
-        INSTANCE(sycl::ref_sycl_eltwise_bwd_t)
+        INSTANCE(cnnl_eltwise_fwd_t)
+        INSTANCE(cnnl_eltwise_bwd_t)
+        // INSTANCE(sycl::ref_sycl_eltwise_fwd_t)
+        // INSTANCE(sycl::ref_sycl_eltwise_bwd_t)
 
         // Deconvolution
+        // INSTANCE(cnnl_deconvolution_fwd_t)
+        // INSTANCE(cnnl_deconvolution_bwd_data_t)
+        // INSTANCE(cnnl_deconvolution_bwd_weights_t)
 
         // Convolution
         // INSTANCE(cnnl_convolution_fwd_t)
@@ -186,53 +192,61 @@ constexpr dnnl::impl::impl_list_item_t sycl_bang_impl_list[] = {
         // Batch Normalization
         // INSTANCE(cnnl_batch_normalization_fwd_t)
         // INSTANCE(cnnl_batch_normalization_bwd_t)
-        INSTANCE(sycl::ref_batch_normalization_fwd_t)
-        INSTANCE(sycl::ref_batch_normalization_bwd_t)
+        // INSTANCE(sycl::ref_batch_normalization_fwd_t)
+        // INSTANCE(sycl::ref_batch_normalization_bwd_t)
 
         // Layer Normalization
-        INSTANCE(sycl::ref_layer_normalization_fwd_t)
-        INSTANCE(sycl::ref_layer_normalization_bwd_t)
+        // INSTANCE(sycl::ref_layer_normalization_fwd_t)
+        // INSTANCE(sycl::ref_layer_normalization_bwd_t)
 
         // PReLU
-        INSTANCE(sycl::ref_prelu_fwd_t)
-        INSTANCE(sycl::ref_prelu_bwd_t)
+        // INSTANCE(sycl::ref_prelu_fwd_t)
+        // INSTANCE(sycl::ref_prelu_bwd_t)
 
         // Pooling
         // INSTANCE(cnnl_pooling_fwd_t)
         // INSTANCE(cnnl_pooling_bwd_t)
-        INSTANCE(sycl::ref_pooling_fwd_t)
-        INSTANCE(sycl::ref_pooling_bwd_t)
+        // INSTANCE(sycl::ref_pooling_fwd_t)
+        // INSTANCE(sycl::ref_pooling_bwd_t)
 
         // LRN
         // INSTANCE(cnnl_lrn_fwd_t)
         // INSTANCE(cnnl_lrn_bwd_t)
-        INSTANCE(sycl::ref_sycl_lrn_fwd_t)
-        INSTANCE(sycl::ref_sycl_lrn_bwd_t)
+        // INSTANCE(sycl::ref_sycl_lrn_fwd_t)
+        // INSTANCE(sycl::ref_sycl_lrn_bwd_t)
 
         // Inner Product
+        // INSTANCE(cnnl_gemm_inner_product_fwd_t)
+        // INSTANCE(cnnl_conv_inner_product_fwd_t)
+        // INSTANCE(cnnl_gemm_inner_product_bwd_data_t)
+        // INSTANCE(cnnl_conv_inner_product_bwd_data_t)
+        // INSTANCE(cnnl_gemm_inner_product_bwd_weights_t)
+        // INSTANCE(cnnl_conv_inner_product_bwd_weights_t)
 
         // Softmax
         INSTANCE(cnnl_softmax_fwd_t)
         INSTANCE(cnnl_softmax_bwd_t)
-        INSTANCE(sycl::ref_sycl_softmax_fwd_t)
-        INSTANCE(sycl::ref_sycl_softmax_bwd_t)
+        // INSTANCE(sycl::ref_sycl_softmax_fwd_t)
+        // INSTANCE(sycl::ref_sycl_softmax_bwd_t)
 
         // Binary
         // INSTANCE(cnnl_binary_t)
-        INSTANCE(sycl::ref_binary_t)
+        // INSTANCE(sycl::ref_binary_t)
 
         // MatMul
         // INSTANCE(cnnl_matmul_t)
 
         // Resampling
-        INSTANCE(sycl::ref_resampling_fwd_t)
-        INSTANCE(sycl::ref_resampling_bwd_t)
+        // INSTANCE(cnnl_resampling_fwd_t)
+        // INSTANCE(cnnl_resampling_bwd_t)
+        // INSTANCE(sycl::ref_resampling_fwd_t)
+        // INSTANCE(sycl::ref_resampling_bwd_t)
 
         // Reduction
         // INSTANCE(cnnl_reduction_t)
 
         // Shuffle
-        INSTANCE(sycl::ref_shuffle_t)
+        // INSTANCE(sycl::ref_shuffle_t)
         nullptr,
 };
 // clang-format on

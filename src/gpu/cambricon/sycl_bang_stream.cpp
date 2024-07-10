@@ -27,7 +27,6 @@ namespace impl {
 namespace gpu {
 namespace cambricon {
 
-
 cnnlHandle_t &sycl_bang_stream_t::get_cnnl_handle(CNqueue bang_stream) {
     if (!bang_stream) bang_stream = get_underlying_stream();
     auto e = utils::downcast<sycl_bang_engine_t *>(engine());

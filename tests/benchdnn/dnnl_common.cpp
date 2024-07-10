@@ -759,12 +759,12 @@ bool is_amd_gpu(const dnnl_engine_t &engine) {
 bool is_cambricon_mlu(const dnnl_engine_t &engine) {
 #ifdef DNNL_WITH_SYCL
     if (!is_gpu(engine)) return false;
-    constexpr int nvidia_vendor_id = 0xcabc;
+    constexpr int cambricon_vendor_id = 0xcabc;
     auto eng = dnnl::engine(engine, true);
     auto device = dnnl::sycl_interop::get_device(eng);
     const auto eng_vendor_id
             = device.get_info<::sycl::info::device::vendor_id>();
-    return eng_vendor_id == nvidia_vendor_id;
+    return eng_vendor_id == cambricon_vendor_id;
 #endif
     return false;
 }

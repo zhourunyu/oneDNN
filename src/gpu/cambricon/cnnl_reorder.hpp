@@ -114,7 +114,7 @@ struct cnnl_reorder_t : public primitive_t {
 
             if (has_different_block_size(src_md(), dst_md())) {
                 assert("reorder not support different block in cnnl" && 0);
-                status::unimplemented;
+                return status::unimplemented;
             } else {
                 reorder_.reset(new cnnl_reorder_stride_t());
             }

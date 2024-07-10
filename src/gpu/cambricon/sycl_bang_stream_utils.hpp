@@ -44,7 +44,7 @@ inline status_t copy_input_arg_to_host(const exec_ctx_t &ctx,
             BANG_EXECUTE_FUNC(cnMemcpyAsync, (CNaddr)host_ptr,
                     (CNaddr)dev_ptr, size,
                     stream->get_underlying_stream());
-            cnQueueSync(stream->get_underlying_stream());
+            cnrtSyncDevice();
         });
     });
 }

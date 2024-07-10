@@ -20,12 +20,12 @@
 
 #include "cnnl.h"
 
-#include "gpu/nvidia/sycl_bang_utils.hpp"
+#include "gpu/cambricon/sycl_bang_utils.hpp"
 
 namespace dnnl {
 namespace impl {
 namespace gpu {
-namespace nvidia {
+namespace cambricon {
 
 struct cnnl_eltwise_impl_base_t {
 
@@ -47,7 +47,11 @@ public:
             alg_kind_t alg_kind, cnnlActivationMode_t *bang_alg_kind) const {
         switch (alg_kind) {
             case alg_kind::eltwise_relu:
-                *bang_alg_kind = cnnlActivationMode_t::CNNL_ACTIVATION_RELU;
+                if (coef == 0.0f)
+                    *bang_alg_kind = cnnlActivationMode_t::CNNL_ACTIVATION_RELU;
+                else
+                    *bang_alg_kind
+                            = cnnlActivationMode_t::CNNL_ACTIVATION_LEAKYRELU;
                 break;
             case alg_kind::eltwise_tanh:
                 *bang_alg_kind = cnnlActivationMode_t::CNNL_ACTIVATION_TANH;
@@ -74,11 +78,8 @@ protected:
     int ndims;
     cnnlActivationDescriptor_t act_desc_ = nullptr;
     cnnlActivationMode_t alg_kind;
-    // alpha and beta are post operation scaling parameters used by cuDNN
-    float alpha = 1;
-    float beta = 0;
-    // coef in cuDNN is use for Relu (is equal to zero)
-    double coef = 0;
+    // coef in cnnl is use for Relu (is equal to zero)
+    float coef = 0;
 };
 
 struct cnnl_eltwise_fwd_impl_t : public cnnl_eltwise_impl_base_t {
@@ -98,10 +99,10 @@ public:
                 pd->ndims());
         CHECK(convert_data_type(pd->src_md(), &data_type_));
 
-        // Get cuDNN activation mode
+        // Get cnnl activation mode
         alg_kind_t alg = pd->desc()->alg_kind;
-        CHECK(convert_alg_kind(alg, &alg_kind));
         coef = pd->desc()->alpha;
+        CHECK(convert_alg_kind(alg, &alg_kind));
 
         CHECK(create_and_set_tensor_descriptor(
                 &tensor_desc_, data_type_, ndims, dims_, strides_));
@@ -112,8 +113,8 @@ public:
     void execute(cnnlHandle_t handle, void **x, int size) const override {
         // Confirm that 2 arguments were passed src and dst
         assert(size == 2);
-        CNNL_EXECUTE_FUNC(cnnlActivationForward, handle, act_desc_, &alpha,
-                tensor_desc_, x[0], &beta, tensor_desc_, x[1]);
+        CNNL_EXECUTE_FUNC(cnnlActivationForward, handle, act_desc_, nullptr,
+                tensor_desc_, x[0], nullptr, tensor_desc_, x[1]);
     }
 
     ~cnnl_eltwise_fwd_impl_t() {
@@ -142,9 +143,6 @@ public:
         // Obtain dimension and strides for the backward eltwise operation
         convert_dims(pd->src_md()->padded_dims, dims_, pd->ndims());
 
-        convert_dims(pd->src_md()->format_desc.blocking.strides, strides_,
-                pd->ndims());
-
         alg_kind_t alg = pd->desc()->alg_kind;
         CHECK(convert_alg_kind(alg, &alg_kind));
         coef = pd->desc()->alpha;
@@ -168,9 +166,9 @@ public:
         assert(size == 3);
         void *dy = x[1];
         void *dx = x[2];
-        CNNL_EXECUTE_FUNC(cnnlActivationBackward, handle, act_desc_, &alpha,
+        CNNL_EXECUTE_FUNC(cnnlActivationBackward, handle, act_desc_, nullptr,
                 tensor_desc_src_, x[0], tensor_diff_desc_, dy, tensor_desc_src_,
-                x[0], &beta, tensor_diff_desc_, dx);
+                x[0], nullptr, tensor_diff_desc_, dx);
     }
 
     ~cnnl_eltwise_bwd_impl_t() {
@@ -186,7 +184,7 @@ private:
     cnnlTensorDescriptor_t tensor_desc_src_;
 };
 
-} // namespace nvidia
+} // namespace cambricon
 } // namespace gpu
 } // namespace impl
 } // namespace dnnl

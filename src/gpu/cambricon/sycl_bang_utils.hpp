@@ -18,9 +18,9 @@
 #ifndef GPU_CAMBRICON_SYCL_BANG_UTILS_HPP
 #define GPU_CAMBRICON_SYCL_BANG_UTILS_HPP
 
-#include <cnrt.h>
-#include <stdexcept>
+#include <cn_api.h>
 #include <cnnl.h>
+#include <stdexcept>
 
 #include "dnnl_sycl.hpp"
 
@@ -80,6 +80,27 @@ static void convert_dims(const dnnl_dim_t *dims, int *new_dims, int n_dims,
         new_dims[i] = adjustment_value;
     }
 }
+
+// transpose dims from nchw to actual layout
+static status_t transpose_dims(int *dims, int ndims, cnnlTensorLayout_t layout) {
+    switch (layout) {
+        case cnnlTensorLayout_t::CNNL_LAYOUT_NCHW:
+            return status::success;
+        case cnnlTensorLayout_t::CNNL_LAYOUT_NHWC:
+            assert(ndims >= 3);
+            std::swap(dims[ndims - 3], dims[ndims - 2]);
+            std::swap(dims[ndims - 2], dims[ndims - 1]);
+            return status::success;
+        case cnnlTensorLayout_t::CNNL_LAYOUT_HWCN:
+            assert(ndims >= 4);
+            std::swap(dims[ndims - 4], dims[ndims - 2]);
+            std::swap(dims[ndims - 3], dims[ndims - 1]);
+            std::swap(dims[ndims - 2], dims[ndims - 1]);
+            return status::success;
+        default: return status::unimplemented;
+    }
+}
+
 static bool memory_desc_matches_nchw_vect_c(const memory_desc_t *mem_desc) {
     // Only one block is supported for second (C) dimension and the block size
     // must be 4 and the dimension has to be a multiple of block size.
@@ -145,7 +166,7 @@ static status_t get_format(const memory_desc_t *md, cnnlTensorLayout_t &format,
         format = cnnlTensorLayout_t::CNNL_LAYOUT_NDHWC;
     } else if (mem_wrapper.matches_one_of_tag(format_tag::any)) {
         format = cnnlTensorLayout_t::CNNL_LAYOUT_ARRAY;
-    }else {
+    } else {
         return status::unimplemented;
     }
     if (consider_ab_as_nhwc && mem_wrapper.matches_one_of_tag(format_tag::ab)) {
@@ -172,8 +193,7 @@ static status_t convert_data_type(const memory_desc_t *mem_desc,
             *cnnl_data_type = cnnlDataType_t::CNNL_DTYPE_FLOAT;
             break;
         case dnnl_data_type_t::dnnl_s8:
-            *cnnl_data_type
-                    = cnnlDataType_t::CNNL_DTYPE_INT8;
+            *cnnl_data_type = cnnlDataType_t::CNNL_DTYPE_INT8;
             break;
         default: return status::unimplemented;
     }
@@ -204,7 +224,6 @@ public:
         : std::runtime_error((message + std::string(bang_error_map(result)))) {
         error_number_ = static_cast<int>(result);
     }
-
     virtual ~bang_error() throw() {}
 
     virtual int get_error_number() const throw() { return error_number_; }
@@ -300,7 +319,6 @@ static status_t cnnl_to_dnnl_status(cnnlStatus_t bang_status) {
     }
 }
 
-
 static status_t bang_to_dnnl_status(CNresult bang_result) {
     switch (bang_result) {
         case CN_SUCCESS: return status::success;
@@ -320,7 +338,6 @@ static status_t bang_to_dnnl_status(CNresult bang_result) {
                     err); \
         } \
     }
-
 
 #define CNNL_EXECUTE_FUNC(name, ...) \
     { \
@@ -359,7 +376,6 @@ static status_t bang_to_dnnl_status(CNresult bang_result) {
         } \
     }
 
-
 #define CNNL_CHECK_V(e) \
     { \
         auto status = (e); \
@@ -379,7 +395,6 @@ static status_t bang_to_dnnl_status(CNresult bang_result) {
         return bang_to_dnnl_status(err); \
     }()
 
-
 #define CNNL_EXECUTE_FUNC_S(name, ...) \
     [&]() { \
         auto err = name(__VA_ARGS__); \
@@ -388,6 +403,18 @@ static status_t bang_to_dnnl_status(CNresult bang_result) {
     }()
 
 static status_t create_and_set_tensor_descriptor(
+        cnnlTensorDescriptor_t *tensor_desc, cnnlDataType_t data_type,
+        int ndims, int *dims, int *strides) {
+
+    CHECK(CNNL_EXECUTE_FUNC_S(cnnlCreateTensorDescriptor, tensor_desc));
+
+    CHECK(CNNL_EXECUTE_FUNC_S(cnnlSetTensorDescriptorEx, *tensor_desc,
+            cnnlTensorLayout_t::CNNL_LAYOUT_ARRAY, data_type, ndims, dims, strides));
+
+    return status::success;
+}
+
+static status_t create_and_set_tensor_descriptor_ex(
         cnnlTensorDescriptor_t *tensor_desc, cnnlTensorLayout_t layout, cnnlDataType_t data_type,
         int ndims, int *dims) {
 
@@ -398,8 +425,6 @@ static status_t create_and_set_tensor_descriptor(
 
     return status::success;
 }
-
-
 
 static status_t create_and_set_conv_descriptor(
         cnnlConvolutionDescriptor_t *conv_desc, int ndims, int *padding,
@@ -413,58 +438,9 @@ static status_t create_and_set_conv_descriptor(
     return status::success;
 }
 
-static void quantize_array(cnnlHandle_t handle, cnnlTensorDescriptor_t tensor_desc, void* _tensor, int bitwidth, void* workspace, size_t workspace_size, 
-    cnnlTensorDescriptor_t q_tensor_desc, void* q_tensor){
-    void *d_position, *d_scale, *d_offset;
-    cnrtMalloc(&d_position, sizeof(int));
-    cnrtMalloc(&d_scale, sizeof(float));
-    cnrtMalloc(&d_offset, sizeof(int));
-
-    auto err1 = cnnlQuantizeParam(handle, CNNL_QUANTIZE_POSITION_SCALE, tensor_desc, _tensor,
-        bitwidth, workspace, workspace_size, d_position, d_scale, d_offset);
-    if(err1 != CNNL_STATUS_SUCCESS)
-        assert(0 && "err1 at quantize_array");
-
-    cnrtSyncDevice();
-
-    // Have to copy these paramters to host memory
-    int position;
-    float scale;    
-    cnrtMemcpy(&position, d_position, sizeof(int), cnrtMemcpyDevToHost);
-    cnrtMemcpy(&scale, d_scale, sizeof(float), cnrtMemcpyDevToHost);
-    if(scale>=2){
-        // printf("scale %f greater than 2, reseted.\n", scale);
-        scale = 1.99999;
-    }
-    if(scale<=0 || scale!=scale){
-        // if scale less than 0 or is NaN, set it manually
-        // printf("scale %f less than 0, reseted.\n", scale);
-        scale = 0.00001;
-    }
-    assert(scale>0);
-    
-    cnrtSyncDevice();
-    // printf("quantize pos:%d, scale:%f\n", position, scale);
-    auto err2 = cnnlSetTensorDescriptorPositionAndScale(q_tensor_desc, position, scale);
-    if(err2 != CNNL_STATUS_SUCCESS)
-        assert(0 && "err2 at quantize_array");
-    cnrtSyncDevice();
-    
-    auto err3 = cnnlQuantizeV1(handle, CNNL_QUANTIZE_POSITION_SCALE, tensor_desc, _tensor, q_tensor_desc, q_tensor);
-    if(err3 != CNNL_STATUS_SUCCESS)
-        assert(0 && "err3 at quantize_array");
-    // CNNL_EXECUTE_FUNC(cnnlQuantizeV1, handle, CNNL_QUANTIZE_POSITION_SCALE, tensor_desc, _tensor, q_tensor_desc, q_tensor);
-
-    cnrtSyncDevice();
-
-    cnrtFree(d_position);
-    cnrtFree(d_scale);
-    cnrtFree(d_offset);
-}
-
 bool attr_post_ops_ok(const primitive_attr_t *attr);
 
-} // namespace nvidia
+} // namespace cambricon
 } // namespace gpu
 } // namespace impl
 } // namespace dnnl

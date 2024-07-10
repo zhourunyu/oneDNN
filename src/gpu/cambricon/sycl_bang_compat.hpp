@@ -18,6 +18,7 @@
 #ifndef GPU_CAMBRICON_SYCL_BANG_COMPAT_HPP
 #define GPU_CAMBRICON_SYCL_BANG_COMPAT_HPP
 
+#include <cn_api.h>
 
 #include "sycl/sycl_compat.hpp"
 

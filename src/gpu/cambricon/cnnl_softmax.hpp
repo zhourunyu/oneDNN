@@ -74,23 +74,15 @@ struct cnnl_softmax_fwd_t : public primitive_t {
     };
 
     status_t init(engine_t *engine) override {
-        // Only single-element scale is supported
-        host_scales_ = new float[3];
-        if (!host_scales_) return status::out_of_memory;
-        host_scales_[0] = 1.0f;
-        host_scales_[1] = 1.0f;
-        host_scales_[2] = 1.0f;
         return status::success;
     }
 
     status_t execute(const exec_ctx_t &ctx) const override;
 
-    virtual ~cnnl_softmax_fwd_t() { delete[] host_scales_; }
+    virtual ~cnnl_softmax_fwd_t() { }
 
 private:
     const pd_t *pd() const { return (const pd_t *)primitive_t::pd().get(); }
-
-    float *host_scales_ = nullptr;
 };
 
 struct cnnl_softmax_bwd_t : public primitive_t {
