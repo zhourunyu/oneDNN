@@ -82,7 +82,7 @@ inline std::string to_string(backend_t backend) {
         case backend_t::opencl: return "OpenCL";
         case backend_t::nvidia: return "Nvidia";
         case backend_t::amd: return "AMD";
-        case backend_t::cambricon: return "CAMBRICON";
+        case backend_t::cambricon: return "Cambricon";
         default: return "Unknown";
     }
 }
@@ -108,6 +108,7 @@ inline backend_t get_sycl_backend(const ::sycl::device &dev) {
     if (plat_name.find("OpenCL") != std::string::npos) return backend_t::opencl;
     if (plat_name.find("NVIDIA") != std::string::npos) return backend_t::nvidia;
     if (plat_name.find("AMD") != std::string::npos) return backend_t::amd;
+    if (plat_name.find("Cambricon") != std::string::npos) return backend_t::cambricon;
     if (plat_name.find("Level-Zero") != std::string::npos)
         return backend_t::level0;
 

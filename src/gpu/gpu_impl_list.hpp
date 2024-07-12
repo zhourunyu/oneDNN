@@ -56,6 +56,11 @@ DECLARE_IMPL_LIST(zero_pad);
 
 #undef DECLARE_IMPL_LIST
 
+const impl_list_item_t *get_concat_impl_list();
+const impl_list_item_t *get_sum_impl_list();
+const impl_list_item_t *get_reorder_impl_list(
+        const memory_desc_t *, const memory_desc_t *);
+
 class gpu_impl_list_t {
 public:
     static const impl_list_item_t *get_concat_implementation_list();

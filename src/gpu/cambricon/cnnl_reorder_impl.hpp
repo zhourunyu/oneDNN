@@ -52,6 +52,7 @@ public:
     virtual ~cnnl_reorder_generic_t() {
         CNNL_EXECUTE_FUNC_V(cnnlDestroyTensorDescriptor, src_desc_);
         CNNL_EXECUTE_FUNC_V(cnnlDestroyTensorDescriptor, dst_desc_);
+        CNNL_EXECUTE_FUNC_V(cnnlDestroyTransposeDescriptor, trans_desc_);
     }
 
     int dst_offset_in_bytes() { return dst_offset_in_bytes_; }
@@ -64,6 +65,10 @@ protected:
     int dims_[DNNL_MAX_NDIMS];
     cnnlTensorDescriptor_t src_desc_;
     cnnlTensorDescriptor_t dst_desc_;
+    cnnlTransposeDescriptor_t trans_desc_;
+    cnnlTensorLayout_t src_format_;
+    cnnlTensorLayout_t dst_format_;
+    std::vector<int> permute;
     float beta_ = 0.0f;
     int dst_offset_in_bytes_ = 0;
     int src_offset_in_bytes_ = 0;
@@ -163,16 +168,8 @@ public:
                 src_desc_, src, dst_desc_, dst);
     }
 
-    ~cnnl_reorder_stride_t() {
-        CNNL_EXECUTE_FUNC_V(
-                cnnlDestroyTransposeDescriptor, trans_desc_);
-    }
-
 private:
-    cnnlTensorLayout_t src_format_;
-    cnnlTensorLayout_t dst_format_;
-    cnnlTransposeDescriptor_t trans_desc_;
-    std::vector<int> permute;
+
 
     using cnnl_reorder_generic_t::cnnl_reorder_generic_t;
 };

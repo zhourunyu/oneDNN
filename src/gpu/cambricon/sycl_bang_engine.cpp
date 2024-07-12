@@ -34,7 +34,7 @@
 // #include "gpu/cambricon/cnnl_pooling.hpp"
 // #include "gpu/cambricon/cnnl_reduction.hpp"
 // #include "gpu/cambricon/cnnl_resampling.hpp"
-// #include "gpu/cambricon/cnnl_softmax.hpp"
+#include "gpu/cambricon/cnnl_softmax.hpp"
 #include "gpu/cambricon/sycl_bang_compat.hpp"
 #include "gpu/cambricon/sycl_bang_engine.hpp"
 #include "gpu/cambricon/sycl_bang_scoped_context.hpp"
@@ -57,10 +57,10 @@ namespace gpu {
 namespace cambricon {
 
 bool is_cambricon_mlu(const ::sycl::device &dev) {
-    constexpr int nvidia_vendor_id = 0xcabc;
+    constexpr int cambricon_vendor_id = 0xcabc;
     return dev.is_gpu()
             && dev.get_info<::sycl::info::device::vendor_id>()
-            == nvidia_vendor_id;
+            == cambricon_vendor_id;
 }
 
 status_t bang_engine_create(engine_t **engine, engine_kind_t engine_kind,
@@ -212,8 +212,8 @@ constexpr dnnl::impl::impl_list_item_t sycl_bang_impl_list[] = {
         // Inner Product
 
         // Softmax
-        // INSTANCE(cnnl_softmax_fwd_t)
-        // INSTANCE(cnnl_softmax_bwd_t)
+        INSTANCE(cnnl_softmax_fwd_t)
+        INSTANCE(cnnl_softmax_bwd_t)
         INSTANCE(sycl::ref_sycl_softmax_fwd_t)
         INSTANCE(sycl::ref_sycl_softmax_bwd_t)
 
