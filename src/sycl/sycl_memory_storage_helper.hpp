@@ -109,7 +109,14 @@ public:
         if (acc_.has_value()) {
             raw_ptr = reinterpret_cast<T *>(
                     reinterpret_cast<uint8_t *>(
-                            ih.get_native_mem<be>(acc_.value()))
+#ifdef DNNL_SYCL_CUDA
+                            gpu::nvidia::compat::get_native_mem<void *>(ih, acc_.value())
+#elif defined(DNNL_SYCL_HIP)
+                            gpu::amd::compat::get_native_mem<void *>(ih, acc_.value())
+#elif defined(DNNL_SYCL_BANG)                        
+                            gpu::cambricon::compat::get_native_mem<void *>(ih, acc_.value()))
+#endif                        
+                            // ih.get_native_mem<be>(acc_.value()))
                     + offset_);
         } else {
             raw_ptr = raw_ptr_;
