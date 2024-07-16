@@ -28,8 +28,8 @@
 #include "gpu/cambricon/cnnl_eltwise.hpp"
 // #include "gpu/cambricon/cnnl_gemm_inner_product.hpp"
 // #include "gpu/cambricon/cnnl_lrn.hpp"
-// #include "gpu/cambricon/cnnl_matmul.hpp"
-// #include "gpu/cambricon/cnnl_pooling.hpp"
+#include "gpu/cambricon/cnnl_matmul.hpp"
+#include "gpu/cambricon/cnnl_pooling.hpp"
 // #include "gpu/cambricon/cnnl_reduction.hpp"
 // #include "gpu/cambricon/cnnl_resampling.hpp"
 #include "gpu/cambricon/cnnl_softmax.hpp"
@@ -204,8 +204,8 @@ constexpr dnnl::impl::impl_list_item_t sycl_bang_impl_list[] = {
         // INSTANCE(sycl::ref_prelu_bwd_t)
 
         // Pooling
-        // INSTANCE(cnnl_pooling_fwd_t)
-        // INSTANCE(cnnl_pooling_bwd_t)
+        INSTANCE(cnnl_pooling_fwd_t)
+        INSTANCE(cnnl_pooling_bwd_t)
         // INSTANCE(sycl::ref_pooling_fwd_t)
         // INSTANCE(sycl::ref_pooling_bwd_t)
 
@@ -234,7 +234,7 @@ constexpr dnnl::impl::impl_list_item_t sycl_bang_impl_list[] = {
         // INSTANCE(sycl::ref_binary_t)
 
         // MatMul
-        // INSTANCE(cnnl_matmul_t)
+        INSTANCE(cnnl_matmul_t)
 
         // Resampling
         // INSTANCE(cnnl_resampling_fwd_t)
