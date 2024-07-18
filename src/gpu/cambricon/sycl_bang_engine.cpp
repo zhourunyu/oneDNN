@@ -23,7 +23,7 @@
 // #include "gpu/cambricon/cnnl_batch_normalization.hpp"
 // #include "gpu/cambricon/cnnl_binary.hpp"
 // #include "gpu/cambricon/cnnl_conv_inner_product.hpp"
-// #include "gpu/cambricon/cnnl_convolution.hpp"
+#include "gpu/cambricon/cnnl_convolution.hpp"
 // #include "gpu/cambricon/cnnl_deconvolution.hpp"
 #include "gpu/cambricon/cnnl_eltwise.hpp"
 // #include "gpu/cambricon/cnnl_gemm_inner_product.hpp"
@@ -185,9 +185,9 @@ constexpr dnnl::impl::impl_list_item_t sycl_bang_impl_list[] = {
         // INSTANCE(cnnl_deconvolution_bwd_weights_t)
 
         // Convolution
-        // INSTANCE(cnnl_convolution_fwd_t)
-        // INSTANCE(cnnl_convolution_bwd_data_t)
-        // INSTANCE(cnnl_convolution_bwd_weights_t)
+        INSTANCE(cnnl_convolution_fwd_t)
+        INSTANCE(cnnl_convolution_bwd_data_t)
+        INSTANCE(cnnl_convolution_bwd_weights_t)
 
         // Batch Normalization
         // INSTANCE(cnnl_batch_normalization_fwd_t)
