@@ -195,6 +195,15 @@ static status_t convert_data_type(const memory_desc_t *mem_desc,
         case dnnl_data_type_t::dnnl_s8:
             *cnnl_data_type = cnnlDataType_t::CNNL_DTYPE_INT8;
             break;
+        case dnnl_data_type_t::dnnl_u8:
+            *cnnl_data_type = cnnlDataType_t::CNNL_DTYPE_UINT8;
+            break;
+        case dnnl_data_type_t::dnnl_s32:
+            *cnnl_data_type = cnnlDataType_t::CNNL_DTYPE_INT32;
+            break;
+        case dnnl_data_type_t::dnnl_boolean:
+            *cnnl_data_type = cnnlDataType_t::CNNL_DTYPE_BOOL;
+            break;
         default: return status::unimplemented;
     }
     return status::success;

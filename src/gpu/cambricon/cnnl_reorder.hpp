@@ -45,8 +45,10 @@ struct cnnl_reorder_t : public primitive_t {
                               ->device();
 
             bool ok = utils::one_of(src_md()->data_type, data_type::s8,
-                              data_type::bf16, data_type::f16, data_type::f32)
+                            data_type::u8, data_type::boolean, data_type::s32,
+                            data_type::bf16, data_type::f16, data_type::f32)
                     && utils::one_of(dst_md()->data_type, data_type::s8,
+                            data_type::u8, data_type::boolean, data_type::s32,
                             data_type::bf16, data_type::f16, data_type::f32)
                     // f16<->bf16 cases are not supported.
                     && IMPLICATION(src_md()->data_type == data_type::bf16,
@@ -60,27 +62,11 @@ struct cnnl_reorder_t : public primitive_t {
 
             if (!ok) return false;
 
-            // Nvidia only supports blocking for Int8
-            if (!utils::one_of(src_md()->data_type, data_type::s8)
-                    && src_md()->format_desc.blocking.inner_nblks > 0)
-                return false;
-            if (!utils::one_of(dst_md()->data_type, data_type::s8)
-                    && dst_md()->format_desc.blocking.inner_nblks > 0)
+            // blocking is not supported
+            if (src_md()->format_desc.blocking.inner_nblks > 0 ||
+                    dst_md()->format_desc.blocking.inner_nblks > 0)
                 return false;
 
-            // Nvidia supports blocking only on channel dimension C
-            if (dst_md()->format_desc.blocking.inner_nblks > 1
-                    || src_md()->format_desc.blocking.inner_nblks > 1)
-                return false;
-            if (utils::one_of(src_md()->data_type, data_type::s8)
-                    && src_md()->format_desc.blocking.inner_nblks == 1) {
-                ok = ok && memory_desc_matches_nchw_vect_c(src_md());
-            }
-            int blks = dst_md()->format_desc.blocking.inner_nblks;
-            if (utils::one_of(dst_md()->data_type, data_type::s8)
-                    && blks == 1) {
-                ok = ok && memory_desc_matches_nchw_vect_c(dst_md());
-            }
             return ok;
         }
 
@@ -88,7 +74,7 @@ struct cnnl_reorder_t : public primitive_t {
             const auto &scales = attr()->scales_;
             const auto &supported_args = {DNNL_ARG_FROM, DNNL_ARG_TO};
             if (!scales.has_default_values(supported_args)) return false;
-            // cuDNN does not support scaling per dimension.
+            // cnnl does not support scaling per dimension.
             for (auto arg : supported_args)
                 if (scales.get(arg).mask_ != 0) return false;
             return true;
@@ -112,16 +98,11 @@ struct cnnl_reorder_t : public primitive_t {
                     && post_ops_ok();
             if (!ok) return status::unimplemented;
 
-            if (has_different_block_size(src_md(), dst_md())) {
-                assert("reorder not support different block in cnnl" && 0);
-                return status::unimplemented;
-            } else {
-                reorder_.reset(new cnnl_reorder_stride_t());
-            }
+            reorder_.reset(new cnnl_reorder_impl_t());
 
             return reorder_->init(this);
         }
-        std::shared_ptr<cnnl_reorder_generic_t> reorder_;
+        std::shared_ptr<cnnl_reorder_impl_t> reorder_;
 
     private:
         DECLARE_GPU_REORDER_CREATE();

@@ -37,6 +37,10 @@ status_t cnnl_reorder_t::execute(const exec_ctx_t &ctx) const {
     return bang_stream->interop_task([&](::sycl::handler &cgh) {
         auto arg_src = CTX_IN_SYCL_MEMORY(DNNL_ARG_SRC);
         auto arg_dst = CTX_OUT_SYCL_MEMORY(DNNL_ARG_DST);
+        auto arg_src_scale
+                = CTX_IN_SYCL_MEMORY(DNNL_ARG_ATTR_SCALES | DNNL_ARG_SRC);
+        auto arg_dst_scale
+                = CTX_IN_SYCL_MEMORY(DNNL_ARG_ATTR_SCALES | DNNL_ARG_DST);
 
         compat::host_task(cgh, [=](const compat::interop_handle &ih) {
             auto &sycl_engine = *utils::downcast<sycl_bang_engine_t *>(
@@ -52,7 +56,10 @@ status_t cnnl_reorder_t::execute(const exec_ctx_t &ctx) const {
             auto b = static_cast<uint8_t *>(dst_)
                     + pd()->reorder_->dst_offset_in_bytes();
 
-            pd()->reorder_->execute(handle, a, b);
+            void *src_sc = arg_src_scale.get_native_pointer(ih);
+            void *dst_sc = arg_dst_scale.get_native_pointer(ih);
+
+            pd()->reorder_->execute(handle, a, b, src_sc, dst_sc);
         });
     });
 }
