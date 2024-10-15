@@ -112,8 +112,6 @@ struct cnnl_matmul_impl_t {
     }
 
     status_t init(matmul_pd_t *pd) {
-        isbatched_ = pd->batched();
-
         memory_desc_wrapper src_d = memory_desc_wrapper(pd->src_md());
         memory_desc_wrapper weights_d = memory_desc_wrapper(pd->weights_md());
         memory_desc_wrapper dst_d = memory_desc_wrapper(pd->dst_md());
@@ -149,14 +147,12 @@ struct cnnl_matmul_impl_t {
     bool has_runtime_params() { return has_runtime_params_; }
 
     void convert_dims_matmul(
-            const memory_desc_t * desc, int *new_dims, int n_dims, bool trans=false) {
+            const memory_desc_t *desc, int *new_dims, int n_dims, bool trans=false) {
         int dims = desc->ndims;
-        for (int i = 0; i < n_dims; i++) {
-            new_dims[i] = 1;
+        for (int i = 0; i < n_dims - 2; i++) {
+            new_dims[i] = desc->dims[i];
         }
-        for (int i = 0; i < dims - 2; i++) {
-            new_dims[i + n_dims - dims] = desc->dims[i];
-        }
+        // always use the last two dimensions, to deal with n_dims = 2
         new_dims[n_dims - 2] = trans ? desc->dims[dims - 1] : desc->dims[dims - 2];
         new_dims[n_dims - 1] = trans ? desc->dims[dims - 2] : desc->dims[dims - 1];
     }
@@ -182,18 +178,21 @@ struct cnnl_matmul_impl_t {
         transC_ = dst_strides[1] == 1 && dst_d.dims()[ndims - 1] > 1
                 ? false : true;
 
+        for (int i = 0; i < ndims - 2; i++) {
+            if (dst_d.dims()[i] > 1) isbatched_ = true;
+        }
+
         return status::success;
     }
 
     status_t init_parameters(const memory_desc_wrapper src_d,
             const memory_desc_wrapper weights_d,
             const memory_desc_wrapper dst_d, const memory_desc_wrapper bias_d) {
-        // Matmul supports runtime paramters for dimensions and scales.
-        // We need to initialize them in the execute function.
         CHECK(init_gemm_parameters(src_d, weights_d, dst_d, bias_d));
         
         // Initialise cnnl tensor descriptors
-        int ndims = dst_d.ndims() < 3 ? 3 : dst_d.ndims();
+        // seems cnnlBatchMatMulBCast_v2 has a bug when batch size is 1 and ndims is 3
+        int ndims = isbatched_ ? dst_d.ndims() : 2;
         int dims[NUM_IO][DNNL_MAX_NDIMS];
 
         convert_dims_matmul(src_d.md_, dims[src], ndims, transA_);
@@ -211,7 +210,7 @@ struct cnnl_matmul_impl_t {
 
         if (with_bias_) {
             // Create bias tensor descriptor
-            convert_dims_matmul(bias_d.md_, dims[bias], bias_d.ndims());
+            convert_dims_matmul(bias_d.md_, dims[bias], ndims);
             CHECK(convert_data_type(bias_d.md_, &data_types_[bias], false));
             CHECK(create_and_set_tensor_descriptor_ex(&tensor_descs_[bias],
                     cnnlTensorLayout_t::CNNL_LAYOUT_ARRAY, data_types_[bias], ndims, dims[bias]));
@@ -221,7 +220,7 @@ struct cnnl_matmul_impl_t {
         CNNL_EXECUTE_FUNC_V(cnnlSetMatMulDescAttr, desc_,
                 cnnlMatMulDescAttribute_t::CNNL_MATMUL_DESC_COMPUTE_TYPE,
                 &acc_type_, sizeof(acc_type_));
-        int transA = transA_ ^ transC_, transB = transB_ ^ transC_;
+        int transA = transC_ ? !transB_ : transA_, transB = transC_ ? !transA_ : transB_;
         CNNL_EXECUTE_FUNC_V(cnnlSetMatMulDescAttr, desc_,
                 cnnlMatMulDescAttribute_t::CNNL_MATMUL_DESC_TRANSA, &transA,
                 sizeof(transA));
@@ -236,9 +235,6 @@ struct cnnl_matmul_impl_t {
             void *a_, void *b_, void *c, void *bias,
             void *src_scale, void *wei_scale, void *dst_scale) {
         assert(c != bias);
-        cnrtQueue_t queue;
-        CNRT_CHECK(cnrtQueueCreate(&queue));
-        CNNL_EXECUTE_FUNC_V(cnnlSetQueue, handle, queue);
         auto &a_desc = transC_ ? tensor_descs_[weight] : tensor_descs_[src];
         auto &b_desc = transC_ ? tensor_descs_[src] : tensor_descs_[weight];
         auto &c_desc = tensor_descs_[dst];
@@ -301,7 +297,6 @@ struct cnnl_matmul_impl_t {
             CNNL_EXECUTE_FUNC(cnnlActivationForward, handle, act_desc_,
                     &alpha, c_desc, c, &beta, c_desc, c);
         }
-        CNRT_CHECK(cnrtQueueSync(queue));
 
         if (workspace_ != nullptr) {
             BANG_EXECUTE_FUNC_V(cnFree, (CNaddr)workspace_);
@@ -311,7 +306,6 @@ struct cnnl_matmul_impl_t {
             BANG_EXECUTE_FUNC_V(cnFree, (CNaddr)workspace_add_);
             workspace_add_ = nullptr;
         }
-        CNRT_CHECK(cnrtQueueDestroy(queue));
     }
 
     ~cnnl_matmul_impl_t() { cleanup(); }

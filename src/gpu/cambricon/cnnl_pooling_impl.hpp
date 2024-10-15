@@ -194,10 +194,6 @@ struct cnnl_pooling_fwd_impl_t : public cnnl_pooling_impl_base_t {
 
     void execute(cnnlHandle_t handle, void *x, void *y, void *ws_x,
             void *ws_y) const override {
-        cnrtQueue_t queue;
-        CNRT_CHECK(cnrtQueueCreate(&queue));
-        CNNL_EXECUTE_FUNC_V(cnnlSetQueue, handle, queue);
-
         CNNL_EXECUTE_FUNC(cnnlGetPoolingWorkspaceSize, handle, pool_mode_, 
                 dims_[dst][ndims_ - 2], dims_[dst][ndims_ - 1], &workspace_size_);
         if (workspace_size_ > 0) {
@@ -214,12 +210,10 @@ struct cnnl_pooling_fwd_impl_t : public cnnl_pooling_impl_base_t {
             BANG_EXECUTE_FUNC(cnMemcpy, (CNaddr)ws_y, (CNaddr)y, y_size_bytes_);
         }
 
-        CNRT_CHECK(cnrtQueueSync(queue));
         if (workspace_) {
             BANG_EXECUTE_FUNC(cnFree, (CNaddr)workspace_);
             workspace_ = nullptr;
         }
-        CNRT_CHECK(cnrtQueueDestroy(queue));
     }
 
 protected:
