@@ -81,10 +81,11 @@ static void convert_dims(const dnnl_dim_t *dims, int *new_dims, int n_dims,
     }
 }
 
-// transpose dims from nchw to actual layout
+// transpose dims from nchw/ncdhw to actual layout
 static status_t transpose_dims(int *dims, int ndims, cnnlTensorLayout_t layout) {
     switch (layout) {
         case cnnlTensorLayout_t::CNNL_LAYOUT_NCHW:
+        case cnnlTensorLayout_t::CNNL_LAYOUT_NCDHW:
             return status::success;
         case cnnlTensorLayout_t::CNNL_LAYOUT_NHWC:
             assert(ndims >= 3);
@@ -95,6 +96,12 @@ static status_t transpose_dims(int *dims, int ndims, cnnlTensorLayout_t layout) 
             assert(ndims >= 4);
             std::swap(dims[ndims - 4], dims[ndims - 2]);
             std::swap(dims[ndims - 3], dims[ndims - 1]);
+            std::swap(dims[ndims - 2], dims[ndims - 1]);
+            return status::success;
+        case cnnlTensorLayout_t::CNNL_LAYOUT_NDHWC:
+            assert(ndims >= 4);
+            std::swap(dims[ndims - 4], dims[ndims - 3]);
+            std::swap(dims[ndims - 3], dims[ndims - 2]);
             std::swap(dims[ndims - 2], dims[ndims - 1]);
             return status::success;
         default: return status::unimplemented;
@@ -160,9 +167,9 @@ static status_t get_format(const memory_desc_t *md, cnnlTensorLayout_t &format,
                        format_tag::abcdef)) {
         format = cnnlTensorLayout_t::CNNL_LAYOUT_NCHW;
     } else if (mem_wrapper.matches_one_of_tag(
-                       format_tag::acb, format_tag::acdb, format_tag::acdeb)) {
+                       format_tag::acb, format_tag::acdb)) {
         format = cnnlTensorLayout_t::CNNL_LAYOUT_NHWC;
-    } else if (mem_wrapper.matches_one_of_tag(format_tag::ndhwc)) {
+    } else if (mem_wrapper.matches_one_of_tag(format_tag::acdeb)) {
         format = cnnlTensorLayout_t::CNNL_LAYOUT_NDHWC;
     } else if (mem_wrapper.matches_one_of_tag(format_tag::any)) {
         format = cnnlTensorLayout_t::CNNL_LAYOUT_ARRAY;

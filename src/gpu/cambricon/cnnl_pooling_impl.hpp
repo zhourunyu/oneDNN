@@ -54,21 +54,6 @@ protected:
         // Only 1D, 2D and 3D pooling is supported by cnnl
         if (kernel_ndims_ > 3) { return status::unimplemented; }
 
-        // cnnl requires symmetric padding, however it seems that
-        // configurations where padding in the beginning > padding at the end of
-        // dimensions work as expected. When padding at the end of any dimension
-        // > padding in the beginning of that dimension the results are wrong
-        // since the data is rearranged incorrectly due to the limitation that
-        // padding has to be the same. This applies to configurations which use
-        // the "average include padding" algorithm. Therefore, such
-        // configurations return status::unimplemented since the results are
-        // wrong.
-        if (pd->desc()->alg_kind == alg_kind::pooling_avg_include_padding
-                && (pd->padL() < pd->padR() || pd->padT() < pd->padB()
-                        || pd->padFront() < pd->padBack())) {
-            return status::unimplemented;
-        }
-
         is_training_ = pd->desc()->prop_kind == prop_kind::forward_training;
         bool is_fwd = pd->is_fwd();
         auto src_md = is_fwd ? pd->src_md() : pd->diff_src_md();
@@ -108,19 +93,26 @@ protected:
 
         if (ndims_ == 4) {
             kernel_padding_[0] = static_cast<int>(pd->padT());
-            kernel_padding_[1] = static_cast<int>(pd->padL());
+            kernel_padding_[1] = static_cast<int>(pd->padB());
+            kernel_padding_[2] = static_cast<int>(pd->padL());
+            kernel_padding_[3] = static_cast<int>(pd->padR());
 
             kernel_strides_[0] = static_cast<int>(pd->KSH());
             kernel_strides_[1] = static_cast<int>(pd->KSW());
         } else {
             kernel_padding_[0] = static_cast<int>(pd->padFront());
-            kernel_padding_[1] = static_cast<int>(pd->padT());
-            kernel_padding_[2] = static_cast<int>(pd->padL());
+            kernel_padding_[1] = static_cast<int>(pd->padBack());
+            kernel_padding_[2] = static_cast<int>(pd->padT());
+            kernel_padding_[3] = static_cast<int>(pd->padB());
+            kernel_padding_[4] = static_cast<int>(pd->padL());
+            kernel_padding_[5] = static_cast<int>(pd->padR());
 
             kernel_strides_[0] = static_cast<int>(pd->KSD());
             kernel_strides_[1] = static_cast<int>(pd->KSH());
             kernel_strides_[2] = static_cast<int>(pd->KSW());
         }
+        out_h_size_ = dims_[dst][ndims_ - 2];
+        out_w_size_ = dims_[dst][ndims_ - 1];
 
         CHECK(convert_data_type(src_md, &data_types_[src]));
         CHECK(convert_data_type(dst_md, &data_types_[dst]));
@@ -147,9 +139,18 @@ protected:
     status_t create_and_set_pooling_descriptor(const pooling_pd_t *pd) {
         CHECK(CNNL_EXECUTE_FUNC_S(cnnlCreatePoolingDescriptor, &pool_desc_));
 
-        CHECK(CNNL_EXECUTE_FUNC_S(cnnlSetPoolingNdDescriptor, pool_desc_,
-                pool_mode_, CNNL_PROPAGATE_NAN, ndims_, kernel_dims_,
-                kernel_padding_, kernel_strides_));
+        if (ndims_ == 4) {
+            CHECK(CNNL_EXECUTE_FUNC_S(cnnlSetPooling2dDescriptor, pool_desc_,
+                    pool_mode_, CNNL_NOT_PROPAGATE_NAN,
+                    kernel_dims_[0], kernel_dims_[1],
+                    kernel_padding_[0], kernel_padding_[1],
+                    kernel_padding_[2], kernel_padding_[3],
+                    kernel_strides_[0], kernel_strides_[1]));
+        } else {
+            CHECK(CNNL_EXECUTE_FUNC_S(cnnlSetPoolingNdDescriptor, pool_desc_,
+                    pool_mode_, CNNL_NOT_PROPAGATE_NAN, ndims_, kernel_dims_,
+                    kernel_padding_, kernel_strides_));
+        }
 
         return status::success;
     }
@@ -184,6 +185,7 @@ protected:
     const float alpha_ = 1.f, beta_ = 0.f;
     int ndims_, kernel_ndims_;
     bool is_training_ = false;
+    int out_h_size_, out_w_size_;
     std::size_t x_size_bytes_ = 0, y_size_bytes_ = 0;
 };
 
@@ -194,14 +196,16 @@ struct cnnl_pooling_fwd_impl_t : public cnnl_pooling_impl_base_t {
 
     void execute(cnnlHandle_t handle, void *x, void *y, void *ws_x,
             void *ws_y) const override {
-        CNNL_EXECUTE_FUNC(cnnlGetPoolingWorkspaceSize, handle, pool_mode_, 
-                dims_[dst][ndims_ - 2], dims_[dst][ndims_ - 1], &workspace_size_);
-        if (workspace_size_ > 0) {
-            BANG_EXECUTE_FUNC(cnMalloc, (CNaddr *)&workspace_, workspace_size_);
+        void *workspace = nullptr;
+        size_t workspace_size = 0;
+        CNNL_EXECUTE_FUNC(cnnlGetPoolingWorkspaceSize, handle, pool_mode_,
+                out_w_size_, out_h_size_, &workspace_size);
+        if (workspace_size > 0) {
+            BANG_EXECUTE_FUNC(cnMalloc, (CNaddr *)&workspace, workspace_size);
         }
 
         CNNL_EXECUTE_FUNC(cnnlPoolingForward, handle, pool_desc_, &alpha_,
-                tensor_descs_[src], x, &beta_, tensor_descs_[dst], y, workspace_, workspace_size_);
+                tensor_descs_[src], x, &beta_, tensor_descs_[dst], y, workspace, workspace_size);
 
         if (is_training_) {
             // Copy x and y into workspace so that they can be used
@@ -210,15 +214,10 @@ struct cnnl_pooling_fwd_impl_t : public cnnl_pooling_impl_base_t {
             BANG_EXECUTE_FUNC(cnMemcpy, (CNaddr)ws_y, (CNaddr)y, y_size_bytes_);
         }
 
-        if (workspace_) {
-            BANG_EXECUTE_FUNC(cnFree, (CNaddr)workspace_);
-            workspace_ = nullptr;
+        if (workspace) {
+            BANG_EXECUTE_FUNC(cnFree, (CNaddr)workspace);
         }
     }
-
-protected:
-    mutable void *workspace_ = nullptr;
-    mutable size_t workspace_size_ = 0;
 };
 
 struct cnnl_pooling_bwd_impl_t : public cnnl_pooling_impl_base_t {
@@ -228,9 +227,12 @@ struct cnnl_pooling_bwd_impl_t : public cnnl_pooling_impl_base_t {
 
     void execute(cnnlHandle_t handle, void *dx, void *dy, void *ws_x,
             void *ws_y) const override {
+        // y not needed in max pooling backward
+        auto y_desc = (pool_mode_ == CNNL_POOLING_MAX) ? nullptr : tensor_descs_[dst];
+        void *y_ptr = (pool_mode_ == CNNL_POOLING_MAX) ? nullptr : ws_y;
 
         CNNL_EXECUTE_FUNC(cnnlPoolingBackward, handle, pool_desc_, &alpha_,
-                tensor_descs_[dst], ws_y, tensor_descs_[dst], dy,
+                y_desc, y_ptr, tensor_descs_[dst], dy,
                 tensor_descs_[src], ws_x, &beta_, tensor_descs_[src], dx);
     }
 };
