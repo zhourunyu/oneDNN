@@ -248,9 +248,11 @@ struct cnnl_matmul_impl_t {
         CNNL_EXECUTE_FUNC_V(cnnlGetMatMulAlgoHeuristic, handle, desc_, a_desc, b_desc, c_desc, c_desc,
                                     nullptr /* prefer */, requested_algo_count, &heuristic_result_,
                                     &return_algo_count);
-        CNNL_EXECUTE_FUNC_V(cnnlGetMatMulHeuristicResult, heuristic_result_, algo_, &workspace_size_);
-        if (workspace_size_ > 0) {
-            BANG_EXECUTE_FUNC_V(cnMalloc, (CNaddr *)&workspace_, workspace_size_);
+        void *workspace = nullptr, *workspace_add = nullptr;
+        size_t workspace_size = 0, workspace_add_size = 0;
+        CNNL_EXECUTE_FUNC_V(cnnlGetMatMulHeuristicResult, heuristic_result_, algo_, &workspace_size);
+        if (workspace_size > 0) {
+            BANG_EXECUTE_FUNC_V(cnMalloc, (CNaddr *)&workspace, workspace_size);
         }
 
         float gemm_beta = post_op_sum_;
@@ -277,17 +279,17 @@ struct cnnl_matmul_impl_t {
 
         CNNL_EXECUTE_FUNC(cnnlBatchMatMulBCast_v2, handle, desc_, algo_,
                 &scale, a_desc, a, b_desc, b, &gemm_beta, c_desc, c,
-                workspace_, workspace_size_);
+                workspace, workspace_size);
             
         if (with_bias_) {
             // When bias is specified call cnnlAssignAdd()
             float bias_beta = 1;
             scale = (with_eltwise_ ? 1 : 1.0f / host_dst_scale);
-            CNNL_EXECUTE_FUNC_V(cnnlGetAssignAddWorkspaceSize, handle, tensor_descs_[io::bias], c_desc, &workspace_add_size_);
-            if (workspace_add_size_ > 0) {
-                BANG_EXECUTE_FUNC_V(cnMalloc, (CNaddr *)&workspace_add_, workspace_add_size_);
+            CNNL_EXECUTE_FUNC_V(cnnlGetAssignAddWorkspaceSize, handle, tensor_descs_[io::bias], c_desc, &workspace_add_size);
+            if (workspace_add_size > 0) {
+                BANG_EXECUTE_FUNC_V(cnMalloc, (CNaddr *)&workspace_add, workspace_add_size);
             }
-            CNNL_EXECUTE_FUNC_V(cnnlAssignAdd, handle, &scale, tensor_descs_[io::bias], bias, workspace_add_, workspace_add_size_, &bias_beta, c_desc, c);
+            CNNL_EXECUTE_FUNC_V(cnnlAssignAdd, handle, &scale, tensor_descs_[io::bias], bias, workspace_add, workspace_add_size, &bias_beta, c_desc, c);
         }
 
         if (with_eltwise_) {
@@ -298,28 +300,22 @@ struct cnnl_matmul_impl_t {
                     &alpha, c_desc, c, &beta, c_desc, c);
         }
 
-        if (workspace_ != nullptr) {
-            BANG_EXECUTE_FUNC_V(cnFree, (CNaddr)workspace_);
-            workspace_ = nullptr;
+        if (workspace != nullptr) {
+            BANG_EXECUTE_FUNC_V(cnFree, (CNaddr)workspace);
         }
-        if (workspace_add_ != nullptr) {
-            BANG_EXECUTE_FUNC_V(cnFree, (CNaddr)workspace_add_);
-            workspace_add_ = nullptr;
+        if (workspace_add != nullptr) {
+            BANG_EXECUTE_FUNC_V(cnFree, (CNaddr)workspace_add);
         }
     }
 
     ~cnnl_matmul_impl_t() { cleanup(); }
 
     void cleanup() {
-        if (act_desc_) {
+        if (act_desc_)
             CNNL_EXECUTE_FUNC_V(cnnlDestroyActivationDescriptor, act_desc_);
-            act_desc_ = nullptr;
-        }
         for (size_t i = 0; i < NUM_IO; i++) {
             if (tensor_descs_[i]) {
-                CNNL_EXECUTE_FUNC_V(
-                        cnnlDestroyTensorDescriptor, tensor_descs_[i]);
-                tensor_descs_[i] = nullptr;
+                CNNL_EXECUTE_FUNC_V(cnnlDestroyTensorDescriptor, tensor_descs_[i]);
             }
         }
         if (desc_)
@@ -327,8 +323,7 @@ struct cnnl_matmul_impl_t {
         if (algo_)
             CNNL_EXECUTE_FUNC_V(cnnlMatMulAlgoDestroy, algo_);
         if (heuristic_result_)
-            CNNL_EXECUTE_FUNC_V(
-                    cnnlDestroyMatMulHeuristicResult, heuristic_result_);
+            CNNL_EXECUTE_FUNC_V(cnnlDestroyMatMulHeuristicResult, heuristic_result_);
     }
 
 private:
@@ -345,8 +340,6 @@ private:
     cnnlMatMulDescriptor_t desc_ = nullptr;
     cnnlMatMulAlgo_t algo_ = nullptr;
     cnnlMatMulHeuristicResult_t heuristic_result_ = nullptr;
-    void *workspace_ = nullptr, *workspace_add_ = nullptr;
-    size_t workspace_size_ = 0, workspace_add_size_ = 0;
     cnnlActivationDescriptor_t act_desc_ = nullptr;
     float post_op_sum_ = 0.0f;
 };

@@ -63,9 +63,12 @@ protected:
 
 public:
     virtual ~cnnl_convolution_impl_base_t() {
-        CNNL_EXECUTE_FUNC_V(cnnlDestroyConvolutionDescriptor, conv_desc);
+        if (conv_desc)
+            CNNL_EXECUTE_FUNC_V(cnnlDestroyConvolutionDescriptor, conv_desc);
         for (size_t i = 0; i < io::NUM_IO; i++) {
-            CNNL_EXECUTE_FUNC_V(cnnlDestroyTensorDescriptor, descs[i]);
+            if (descs[i]) {
+                CNNL_EXECUTE_FUNC_V(cnnlDestroyTensorDescriptor, descs[i]);
+            }
         }
     }
     virtual status_t configure_alg_kind(engine_t *, convolution_pd_t *pd) = 0;

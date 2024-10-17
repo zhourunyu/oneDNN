@@ -173,7 +173,8 @@ struct cnnl_softmax_fwd_impl_t : public cnnl_softmax_impl_base_t {
     }
 
     ~cnnl_softmax_fwd_impl_t() {
-        CNNL_EXECUTE_FUNC_V(cnnlDestroyTensorDescriptor, tensor_desc);
+        if (tensor_desc)
+            CNNL_EXECUTE_FUNC_V(cnnlDestroyTensorDescriptor, tensor_desc);
     }
 };
 
@@ -221,8 +222,10 @@ struct cnnl_softmax_bwd_impl_t : public cnnl_softmax_impl_base_t {
     }
 
     ~cnnl_softmax_bwd_impl_t() {
-        CNNL_EXECUTE_FUNC_V(cnnlDestroyTensorDescriptor, tensor_dst_desc);
-        CNNL_EXECUTE_FUNC_V(cnnlDestroyTensorDescriptor, tensor_diff_desc);
+        if (tensor_dst_desc)
+            CNNL_EXECUTE_FUNC_V(cnnlDestroyTensorDescriptor, tensor_dst_desc);
+        if (tensor_diff_desc)
+            CNNL_EXECUTE_FUNC_V(cnnlDestroyTensorDescriptor, tensor_diff_desc);
     }
 };
 

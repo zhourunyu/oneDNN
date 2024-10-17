@@ -118,7 +118,8 @@ public:
     }
 
     ~cnnl_eltwise_fwd_impl_t() {
-        CNNL_EXECUTE_FUNC_V(cnnlDestroyTensorDescriptor, tensor_desc_);
+        if (tensor_desc_)
+            CNNL_EXECUTE_FUNC_V(cnnlDestroyTensorDescriptor, tensor_desc_);
     }
 
 private:
@@ -172,8 +173,10 @@ public:
     }
 
     ~cnnl_eltwise_bwd_impl_t() {
-        CNNL_EXECUTE_FUNC_V(cnnlDestroyTensorDescriptor, tensor_desc_src_);
-        CNNL_EXECUTE_FUNC_V(cnnlDestroyTensorDescriptor, tensor_diff_desc_);
+        if (tensor_desc_src_)
+            CNNL_EXECUTE_FUNC_V(cnnlDestroyTensorDescriptor, tensor_desc_src_);
+        if (tensor_diff_desc_)
+            CNNL_EXECUTE_FUNC_V(cnnlDestroyTensorDescriptor, tensor_diff_desc_);
     }
 
 private:
