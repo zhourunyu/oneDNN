@@ -103,13 +103,18 @@ public:
             cnnlDataType_t filter_data_types, int filter_ndims,
             int *filter_dims, cnnlTensorLayout_t filter_format,
             cnnlTensorLayout_t transform_filter_format) {
+        int src_dims[DNNL_MAX_NDIMS], dst_dims[DNNL_MAX_NDIMS];
+        std::copy(filter_dims, filter_dims + filter_ndims, src_dims);
+        std::copy(filter_dims, filter_dims + filter_ndims, dst_dims);
+        CHECK(transpose_dims(src_dims, filter_ndims, filter_format));
+        CHECK(transpose_dims(dst_dims, filter_ndims, transform_filter_format));
         // Set a descriptor for the current filter.
         CHECK(create_and_set_tensor_descriptor_ex(&current_filter_desc_,
-                filter_format, filter_data_types, filter_ndims, filter_dims));
+                filter_format, filter_data_types, filter_ndims, src_dims));
         // Set a descriptor for the transform filter.
         CHECK(create_and_set_tensor_descriptor_ex(&transform_filter_desc_,
                 transform_filter_format, filter_data_types, filter_ndims, 
-                filter_dims));
+                dst_dims));
         set_permute_dims(filter_ndims, filter_format, transform_filter_format);
         CNNL_EXECUTE_FUNC_V(cnnlCreateTransposeDescriptor, &trans_desc_);
         CNNL_EXECUTE_FUNC_V(cnnlCreateTransposeDescriptor, &trans_desc_reverse_);

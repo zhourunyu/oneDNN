@@ -327,6 +327,8 @@ public:
     status_t get_formats() {
         CHECK(get_format(&dnnl_descs[x], formats[x]));
         CHECK(get_format(&dnnl_descs[y], formats[y]));
+        if (formats[x] != CNNL_LAYOUT_NHWC || formats[y] != CNNL_LAYOUT_NHWC)
+            return status::unimplemented;
         return status::success;
     }
 
