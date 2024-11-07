@@ -148,13 +148,16 @@ struct cnnl_matmul_impl_t {
 
     void convert_dims_matmul(
             const memory_desc_t *desc, int *new_dims, int n_dims, bool trans=false) {
-        int dims = desc->ndims;
-        for (int i = 0; i < n_dims - 2; i++) {
-            new_dims[i] = desc->dims[i];
+        int src_ndims = desc->ndims;
+        for (int i = 0; i < n_dims - src_ndims; i++) {
+            new_dims[i] = 1;
         }
-        // always use the last two dimensions, to deal with n_dims = 2
-        new_dims[n_dims - 2] = trans ? desc->dims[dims - 1] : desc->dims[dims - 2];
-        new_dims[n_dims - 1] = trans ? desc->dims[dims - 2] : desc->dims[dims - 1];
+        for (int i = 0; i < src_ndims; i++) {
+            new_dims[i + n_dims - src_ndims] = desc->dims[i];
+        }
+        if (trans) {
+            std::swap(new_dims[n_dims - 2], new_dims[n_dims - 1]);
+        }
     }
 
     status_t init_gemm_parameters(const memory_desc_wrapper src_d,
@@ -178,10 +181,6 @@ struct cnnl_matmul_impl_t {
         transC_ = dst_strides[1] == 1 && dst_d.dims()[ndims - 1] > 1
                 ? false : true;
 
-        for (int i = 0; i < ndims - 2; i++) {
-            if (dst_d.dims()[i] > 1) isbatched_ = true;
-        }
-
         return status::success;
     }
 
@@ -191,8 +190,7 @@ struct cnnl_matmul_impl_t {
         CHECK(init_gemm_parameters(src_d, weights_d, dst_d, bias_d));
         
         // Initialise cnnl tensor descriptors
-        // seems cnnlBatchMatMulBCast_v2 has a bug when batch size is 1 and ndims is 3
-        int ndims = isbatched_ ? dst_d.ndims() : 2;
+        int ndims = dst_d.ndims() < 3 ? 3 : dst_d.ndims();
         int dims[NUM_IO][DNNL_MAX_NDIMS];
 
         convert_dims_matmul(src_d.md_, dims[src], ndims, transA_);
@@ -210,10 +208,12 @@ struct cnnl_matmul_impl_t {
 
         if (with_bias_) {
             // Create bias tensor descriptor
-            convert_dims_matmul(bias_d.md_, dims[bias], ndims);
+            int strides[DNNL_MAX_NDIMS];
+            convert_dims(bias_d.dims(), dims[bias], bias_d.ndims());
+            convert_dims(bias_d.blocking_desc().strides, strides, bias_d.ndims());
             CHECK(convert_data_type(bias_d.md_, &data_types_[bias], false));
-            CHECK(create_and_set_tensor_descriptor_ex(&tensor_descs_[bias],
-                    cnnlTensorLayout_t::CNNL_LAYOUT_ARRAY, data_types_[bias], ndims, dims[bias]));
+            CHECK(create_and_set_tensor_descriptor(&tensor_descs_[bias],
+                    data_types_[bias], bias_d.ndims(), dims[bias], strides));
         }
 
         CNNL_EXECUTE_FUNC_V(cnnlMatMulDescCreate, &desc_);
@@ -245,12 +245,12 @@ struct cnnl_matmul_impl_t {
         if (heuristic_result_ == nullptr)
             CNNL_EXECUTE_FUNC_V(cnnlCreateMatMulHeuristicResult, &heuristic_result_);
         int requested_algo_count = 1, return_algo_count = 0;
-        CNNL_EXECUTE_FUNC_V(cnnlGetMatMulAlgoHeuristic, handle, desc_, a_desc, b_desc, c_desc, c_desc,
+        CNNL_EXECUTE_FUNC_V(cnnlGetBatchMatMulAlgoHeuristic, handle, desc_, a_desc, b_desc, c_desc,
                                     nullptr /* prefer */, requested_algo_count, &heuristic_result_,
                                     &return_algo_count);
         void *workspace = nullptr, *workspace_add = nullptr;
         size_t workspace_size = 0, workspace_add_size = 0;
-        CNNL_EXECUTE_FUNC_V(cnnlGetMatMulHeuristicResult, heuristic_result_, algo_, &workspace_size);
+        CNNL_EXECUTE_FUNC_V(cnnlGetBatchMatMulHeuristicResult, heuristic_result_, algo_, &workspace_size);
         if (workspace_size > 0) {
             BANG_EXECUTE_FUNC_V(cnMalloc, (CNaddr *)&workspace, workspace_size);
         }
@@ -330,7 +330,7 @@ private:
     bool transA_;
     bool transB_;
     bool transC_;
-    bool isbatched_ = false, with_bias_ = false;
+    bool with_bias_ = false;
     bool with_eltwise_ = false;
     bool has_runtime_params_ = false;
     enum io { src = 0, weight, dst, bias, NUM_IO };
