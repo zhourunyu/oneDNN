@@ -99,6 +99,8 @@ protected:
 
             kernel_strides_[0] = static_cast<int>(pd->KSH());
             kernel_strides_[1] = static_cast<int>(pd->KSW());
+            kernel_dilations_[0] = static_cast<int>(pd->KDH() + 1);
+            kernel_dilations_[1] = static_cast<int>(pd->KDW() + 1);
         } else {
             kernel_padding_[0] = static_cast<int>(pd->padFront());
             kernel_padding_[1] = static_cast<int>(pd->padBack());
@@ -110,6 +112,9 @@ protected:
             kernel_strides_[0] = static_cast<int>(pd->KSD());
             kernel_strides_[1] = static_cast<int>(pd->KSH());
             kernel_strides_[2] = static_cast<int>(pd->KSW());
+            kernel_dilations_[0] = static_cast<int>(pd->KDD() + 1);
+            kernel_dilations_[1] = static_cast<int>(pd->KDH() + 1);
+            kernel_dilations_[2] = static_cast<int>(pd->KDW() + 1);
         }
         out_h_size_ = dims_[dst][ndims_ - 2];
         out_w_size_ = dims_[dst][ndims_ - 1];
@@ -140,16 +145,17 @@ protected:
         CHECK(CNNL_EXECUTE_FUNC_S(cnnlCreatePoolingDescriptor, &pool_desc_));
 
         if (ndims_ == 4) {
-            CHECK(CNNL_EXECUTE_FUNC_S(cnnlSetPooling2dDescriptor, pool_desc_,
+            CHECK(CNNL_EXECUTE_FUNC_S(cnnlSetPooling2dDescriptor_v2, pool_desc_,
                     pool_mode_, CNNL_NOT_PROPAGATE_NAN,
                     kernel_dims_[0], kernel_dims_[1],
                     kernel_padding_[0], kernel_padding_[1],
                     kernel_padding_[2], kernel_padding_[3],
-                    kernel_strides_[0], kernel_strides_[1]));
+                    kernel_strides_[0], kernel_strides_[1],
+                    kernel_dilations_[0], kernel_dilations_[1], /*ceil_mode*/false));
         } else {
-            CHECK(CNNL_EXECUTE_FUNC_S(cnnlSetPoolingNdDescriptor, pool_desc_,
+            CHECK(CNNL_EXECUTE_FUNC_S(cnnlSetPoolingNdDescriptor_v2, pool_desc_,
                     pool_mode_, CNNL_NOT_PROPAGATE_NAN, ndims_, kernel_dims_,
-                    kernel_padding_, kernel_strides_));
+                    kernel_padding_, kernel_strides_, kernel_dilations_, /*ceil_mode*/false));
         }
 
         return status::success;
@@ -182,6 +188,7 @@ protected:
     int kernel_dims_[DNNL_MAX_NDIMS];
     int kernel_padding_[DNNL_MAX_NDIMS];
     int kernel_strides_[DNNL_MAX_NDIMS];
+    int kernel_dilations_[DNNL_MAX_NDIMS];
     const float alpha_ = 1.f, beta_ = 0.f;
     int ndims_, kernel_ndims_;
     bool is_training_ = false;
@@ -204,8 +211,20 @@ struct cnnl_pooling_fwd_impl_t : public cnnl_pooling_impl_base_t {
             BANG_EXECUTE_FUNC(cnMalloc, (CNaddr *)&workspace, workspace_size);
         }
 
-        CNNL_EXECUTE_FUNC(cnnlPoolingForward, handle, pool_desc_, &alpha_,
-                tensor_descs_[src], x, &beta_, tensor_descs_[dst], y, workspace, workspace_size);
+        void *extra_input_host = nullptr, *extra_input = nullptr;
+        size_t extra_input_size = 0;
+        CNNL_EXECUTE_FUNC(cnnlGetPoolingExtraInputSize, handle, pool_mode_,
+            out_w_size_, out_h_size_, &extra_input_size);
+        if (extra_input_size > 0) {
+            extra_input_host = new int8_t[extra_input_size];
+            CNNL_EXECUTE_FUNC(cnnlInitPoolingExtraInput, handle, pool_desc_,
+                    tensor_descs_[src], tensor_descs_[dst], extra_input_host);
+            BANG_EXECUTE_FUNC(cnMalloc, (CNaddr *)&extra_input, extra_input_size);
+            BANG_EXECUTE_FUNC(cnMemcpy, (CNaddr)extra_input, (CNaddr)extra_input_host, extra_input_size);
+        }
+
+        CNNL_EXECUTE_FUNC(cnnlPoolingForward_v2, handle, pool_desc_, &alpha_,
+                tensor_descs_[src], x, &beta_, extra_input, tensor_descs_[dst], y, workspace, workspace_size);
 
         if (is_training_) {
             // Copy x and y into workspace so that they can be used
@@ -216,6 +235,12 @@ struct cnnl_pooling_fwd_impl_t : public cnnl_pooling_impl_base_t {
 
         if (workspace) {
             BANG_EXECUTE_FUNC(cnFree, (CNaddr)workspace);
+        }
+        if (extra_input) {
+            BANG_EXECUTE_FUNC(cnFree, (CNaddr)extra_input);
+        }
+        if (extra_input_host) {
+            delete[] static_cast<int8_t *>(extra_input_host);
         }
     }
 };
